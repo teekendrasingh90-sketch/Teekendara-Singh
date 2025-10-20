@@ -1,6 +1,6 @@
 {
   "name": "Copy of Spark",
-  "description": "An AI-powered creative assistant to generate stunning images, thumbnails, and videos. Upload an image, choose your style and aspect ratio, or write a prompt, and let the AI bring your vision to life.",
+  "description": "An AI-powered creative assistant to generate stunning images and thumbnails. Upload an image, choose your style and aspect ratio, or write a prompt, and let the AI bring your vision to life.",
   "requestFramePermissions": [
     "microphone"
   ]

@@ -134,71 +134,62 @@ export const generateSpeech = async (text: string): Promise<string> => {
     }
 };
 
-
+// FIX: Added generateVideo function to handle video generation requests from VideoGeneratorView.
 export const generateVideo = async (
     prompt: string,
     resolution: '720p' | '1080p',
     aspectRatio: '16:9' | '9:16',
-    setLoadingMessage: (message: string) => void
+    onProgress: (message: string) => void
 ): Promise<string> => {
+    // Per Veo guidelines, a new client should be instantiated for each call
+    // to ensure the latest API key from the aistudio dialog is used.
     if (!process.env.API_KEY) {
-        throw new Error("API_KEY is not available. Please select an API key.");
+        throw new Error("API Key not found. Please select one using the 'Select API Key' button.");
     }
-
-    // Per Veo guidelines, create a new instance to ensure the latest API key is used.
-    const veoAI = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     try {
-        setLoadingMessage('Starting video generation...');
-        let operation = await veoAI.models.generateVideos({
+        onProgress('Sending request to the model...');
+        let operation = await ai.models.generateVideos({
             model: 'veo-3.1-fast-generate-preview',
             prompt,
             config: {
                 numberOfVideos: 1,
                 resolution,
                 aspectRatio,
-            },
+            }
         });
 
-        setLoadingMessage('Processing video... this may take a few minutes.');
-        let pollCount = 0;
-        const loadingMessages = [
-            'Analyzing prompt and preparing assets...',
-            'Building scenes and composing shots...',
-            'Rendering frames and applying effects...',
-            'Finalizing video and encoding output...',
-            'Almost there, polishing the final details...'
-        ];
-
+        onProgress('Request received. Generating video... this can take a few minutes.');
+        
         while (!operation.done) {
-            // Poll every 10 seconds as per guidelines
-            await new Promise(resolve => setTimeout(resolve, 10000));
-            setLoadingMessage(loadingMessages[pollCount % loadingMessages.length]);
-            operation = await veoAI.operations.getVideosOperation({ operation });
-            pollCount++;
+            await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10 seconds
+            onProgress('Checking video status...');
+            operation = await ai.operations.getVideosOperation({ operation: operation });
         }
 
+        onProgress('Video generated! Downloading...');
+        
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) {
-            throw new Error('Video generation completed, but no download link was found.');
+            throw new Error("The model did not return a video URI.");
         }
 
-        setLoadingMessage('Fetching generated video...');
-        // Per guidelines, append the API key when fetching from the download link.
+        // Per Veo guidelines, API key must be appended to the download link.
         const videoResponse = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
         if (!videoResponse.ok) {
-            const errorBody = await videoResponse.text();
-            console.error('Failed to fetch video:', errorBody);
-            throw new Error(`Failed to fetch video. Status: ${videoResponse.statusText}`);
+            const errorText = await videoResponse.text();
+            console.error('Video download failed:', errorText);
+            throw new Error(`Failed to download video: ${videoResponse.statusText}`);
         }
         
         const videoBlob = await videoResponse.blob();
-        const videoUrl = URL.createObjectURL(videoBlob);
-        
-        return videoUrl;
+        return URL.createObjectURL(videoBlob);
+
     } catch (error: any) {
-        console.error("Error in generateVideo service:", error);
-        // Re-throw to be handled by the component, which has logic for API key errors.
+        console.error("Error generating video:", error);
+        // Rethrow the error to be handled by the component, which has specific logic
+        // for certain errors to reset the API key state.
         throw error;
     }
 };

@@ -4,8 +4,7 @@ import {
   AssistantView, 
   ImageGeneratorView, 
   ThumbnailGeneratorView, 
-  AuthView, 
-  VideoGeneratorView 
+  AuthView
 } from './components';
 import { View } from './types';
 import { 
@@ -15,8 +14,7 @@ import {
   ThumbnailIcon, 
   MicrophoneIcon, 
   ThemeIcon, 
-  LogoutIcon, 
-  VideoIcon 
+  LogoutIcon
 } from './components/icons';
 
 
@@ -24,7 +22,7 @@ type Theme = 'light' | 'dark';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Thumbnail | View.Video | null>(null);
+  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Thumbnail | null>(null);
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
@@ -92,7 +90,7 @@ const App: React.FC = () => {
     setIsFabMenuOpen(false); // Close FAB menu on logout
   };
 
-  const openGenerator = (generator: View.Images | View.Thumbnail | View.Video) => {
+  const openGenerator = (generator: View.Images | View.Thumbnail) => {
     setActiveGenerator(generator);
     setIsFabMenuOpen(false);
   };
@@ -199,18 +197,6 @@ const App: React.FC = () => {
                 </div>
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Thumbnail Generator</span>
               </button>
-
-               {/* Video Generator Button */}
-              <button
-                onClick={() => openGenerator(View.Video)}
-                className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border border-slate-300 dark:border-gray-700 shadow-lg transform hover:scale-105"
-                aria-label="Video Generator"
-              >
-                <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <VideoIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Video Generator</span>
-              </button>
             </div>
             
             <button
@@ -240,7 +226,6 @@ const App: React.FC = () => {
               <main className="mt-16 md:mt-8 relative">
                 {activeGenerator === View.Images && <ImageGeneratorView />}
                 {activeGenerator === View.Thumbnail && <ThumbnailGeneratorView />}
-                {activeGenerator === View.Video && <VideoGeneratorView />}
               </main>
             </div>
           </div>

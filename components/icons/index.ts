@@ -13,4 +13,5 @@ export { default as SettingsIcon } from './SettingsIcon';
 export { default as SpinnerIcon } from './SpinnerIcon';
 export { default as ThemeIcon } from './ThemeIcon';
 export { default as ThumbnailIcon } from './ThumbnailIcon';
+// FIX: Export VideoIcon to resolve import error in VideoGeneratorView.
 export { default as VideoIcon } from './VideoIcon';

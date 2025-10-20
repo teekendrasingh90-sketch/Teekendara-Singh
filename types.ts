@@ -3,7 +3,6 @@ export enum View {
   Assistant = 'Assistant',
   Images = 'Images',
   Thumbnail = 'Thumbnail',
-  Video = 'Video',
 }
 
 export enum ImageStyle {
