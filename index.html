@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Creative Suite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Set theme on initial load to prevent flashing
+      if (localStorage.getItem('spark-theme') === 'dark' || (!('spark-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
+<style>
+  @keyframes fluidGlow {
+    0% { background-position: 0% 50%; }
+    25% { background-position: 100% 50%; }
+    50% { background-position: 50% 100%; }
+    75% { background-position: 0% 25%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  /* Correctly targets body when the 'dark' class is on the <html> element */
+  .dark body {
+    background-color: #000000; /* Pure Black */
+    background-image: none;
+    animation: none;
+  }
+
+  body {
+     /* Enhanced light theme with a soft, animated gradient */
+     background-color: #f8fafc; /* A very light gray base */
+     background-image:
+        radial-gradient(at 0% 0%, hsla(200, 100%, 80%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 95% 20%, hsla(30, 100%, 85%, 0.2) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, hsla(260, 100%, 90%, 0.25) 0px, transparent 50%),
+        radial-gradient(at 0% 100%, hsla(160, 80%, 80%, 0.15) 0px, transparent 50%);
+     background-size: 300% 300%;
+     animation: fluidGlow 40s ease-in-out infinite; /* Apply animation to both themes */
+  }
+
+  @keyframes bubble-pulse-light {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0.2); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(0, 0, 0, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+  }
+
+  @keyframes bubble-pulse-dark {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.4); } /* cyan-400 */
+    70% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(34, 211, 238, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+  }
+
+  .animate-bubble-pulse {
+      animation: bubble-pulse-light 2s infinite cubic-bezier(0.66, 0, 0, 1);
+  }
+
+  .dark .animate-bubble-pulse {
+      animation-name: bubble-pulse-dark;
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(.33);
+    }
+    80%, 100% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes pulse-dot {
+    0% {
+      transform: scale(.8);
+    }
+    50% {
+      transform: scale(1);
+    }
+    100% {
+      transform: scale(.8);
+    }
+  }
+
+  /* General fade-in for modals/views */
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out forwards;
+  }
+
+  /* New animations for Permission Modal */
+  @keyframes scale-up-fade-in {
+    from { 
+      opacity: 0; 
+      transform: scale(0.95) translateY(10px);
+    }
+    to { 
+      opacity: 1; 
+      transform: scale(1) translateY(0);
+    }
+  }
+  .animate-scale-up-fade-in {
+    animation: scale-up-fade-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  @keyframes scale-down-fade-out {
+    from {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+    to {
+      opacity: 0;
+      transform: scale(0.95) translateY(10px);
+    }
+  }
+  .animate-scale-down-fade-out {
+    animation: scale-down-fade-out 0.3s ease-in forwards;
+  }
+  
+  @keyframes spin-slow {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+      animation: spin-slow 25s linear infinite;
+  }
+  
+  @keyframes pulse-ring-soft {
+    0% {
+      transform: scale(0.95);
+      opacity: 0.5;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 0.8;
+    }
+    100% {
+      transform: scale(0.95);
+      opacity: 0.5;
+    }
+  }
+  .animate-pulse-ring-soft {
+      animation: pulse-ring-soft 3s ease-in-out infinite;
+  }
+
+  @keyframes charge-ring {
+    0% {
+      box-shadow: 0 0 0 0px rgba(0, 0, 0, 0.3);
+    }
+    100% {
+      box-shadow: 0 0 0 25px rgba(0, 0, 0, 0);
+    }
+  }
+  .dark .animate-charging {
+      animation: charge-ring 1.2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+  }
+  
+  @keyframes bounce-effect {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.25);
+    }
+  }
+  .animate-bounce-effect {
+    animation: bounce-effect 0.4s ease-in-out;
+  }
+
+  /* Blinking caret for typing effect */
+  @keyframes blink-caret {
+    from, to { border-color: transparent; }
+    50% { border-color: #22d3ee; } /* cyan-400 */
+  }
+  .animate-blink-caret {
+    animation: blink-caret 0.75s step-end infinite;
+  }
+
+  /* Screen bounce for tap feedback */
+  @keyframes screen-bounce {
+    0%, 100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.04);
+    }
+  }
+  .animate-screen-bounce {
+    animation: screen-bounce 0.4s ease-in-out;
+  }
+
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.25.0",
+    "vite": "https://aistudiocdn.com/vite@^7.1.11",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.0.4"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
