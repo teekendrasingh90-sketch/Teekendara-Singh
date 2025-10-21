@@ -14,41 +14,10 @@ import {
   MicrophoneIcon, 
   ThemeIcon, 
   LogoutIcon,
-  DownloadIcon
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
-
-const DownloadPrompt: React.FC<{ onInstall: () => void; onDismiss: () => void }> = ({ onInstall, onDismiss }) => {
-  return (
-    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] w-full max-w-lg animate-slide-down-fade-in">
-        <div className="bg-white/80 dark:bg-gray-800/90 backdrop-blur-lg border border-slate-300 dark:border-gray-700 rounded-xl shadow-xl p-4 mx-4 flex items-center justify-between gap-4">
-            <div className="flex-shrink-0 bg-slate-200 dark:bg-gray-900 p-3 rounded-full">
-                <DownloadIcon />
-            </div>
-            <div className="flex-grow">
-                <p className="font-bold text-slate-800 dark:text-white">Get the Spark App!</p>
-                <p className="text-sm text-slate-600 dark:text-gray-300">Add to home screen for a seamless experience.</p>
-            </div>
-            <button
-                onClick={onInstall}
-                className="flex-shrink-0 bg-slate-800 text-white dark:bg-white dark:text-black px-4 py-2 rounded-lg font-semibold text-sm hover:bg-slate-700 dark:hover:bg-gray-200 transition-colors"
-                aria-label="Install app"
-            >
-                Install
-            </button>
-            <button
-                onClick={onDismiss}
-                className="flex-shrink-0 text-slate-500 dark:text-gray-400 hover:text-slate-800 dark:hover:text-white transition-colors p-1 rounded-full"
-                aria-label="Close prompt"
-            >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-        </div>
-    </div>
-  );
-};
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
@@ -56,8 +25,6 @@ const App: React.FC = () => {
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
-  const [showDownloadPrompt, setShowDownloadPrompt] = useState(false);
-  const [installPromptEvent, setInstallPromptEvent] = useState<Event | null>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
 
@@ -77,35 +44,6 @@ const App: React.FC = () => {
     const sessionExists = localStorage.getItem('spark-session');
     if (sessionExists) {
       setIsAuthenticated(true);
-    }
-  }, []);
-  
-  // Listen for the browser's install prompt
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setInstallPromptEvent(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  // Show download prompt after 5 seconds, if not installed or dismissed
-  useEffect(() => {
-    const promptDismissed = sessionStorage.getItem('spark-download-prompt-dismissed');
-    // Check if the app is running in standalone mode (already installed)
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-
-    if (!promptDismissed && !isStandalone) {
-      const timer = setTimeout(() => {
-        setShowDownloadPrompt(true);
-      }, 5000);
-
-      return () => clearTimeout(timer);
     }
   }, []);
 
@@ -142,33 +80,6 @@ const App: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isFabMenuOpen]);
-  
-  const handleInstallClick = async () => {
-    // Hide the prompt immediately and mark as dismissed for the session
-    setShowDownloadPrompt(false);
-    sessionStorage.setItem('spark-download-prompt-dismissed', 'true');
-
-    if (installPromptEvent) {
-        // Show the browser's install prompt
-        (installPromptEvent as any).prompt();
-
-        // Wait for the user to respond to the prompt.
-        const { outcome } = await (installPromptEvent as any).userChoice;
-        console.log(`User response to the install prompt: ${outcome}`);
-
-        // We can only use the prompt once. Clear it.
-        setInstallPromptEvent(null);
-    } else {
-        // If the prompt event is not available, we can't trigger the install.
-        // Inform the user how to do it manually.
-        alert("This app can be installed! Open your browser's menu and look for 'Add to Home Screen' or 'Install app'.");
-    }
-  };
-
-  const handleDismissDownloadPrompt = () => {
-    setShowDownloadPrompt(false);
-    sessionStorage.setItem('spark-download-prompt-dismissed', 'true');
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('spark-session');
@@ -195,7 +106,6 @@ const App: React.FC = () => {
   // Render main app if authenticated
   return (
     <div className="relative min-h-screen w-full bg-transparent overflow-hidden text-slate-800 dark:text-slate-200">
-        {showDownloadPrompt && <DownloadPrompt onInstall={handleInstallClick} onDismiss={handleDismissDownloadPrompt} />}
         {/* Settings Button and Menu */}
         <div ref={settingsRef} className="absolute top-4 right-4 z-50">
             <button

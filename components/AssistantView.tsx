@@ -531,48 +531,34 @@ const AssistantView: React.FC = () => {
                     className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 lg:px-8 pb-20 sm:pb-24 max-h-full overflow-y-auto pointer-events-auto"
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                    <div className="flex flex-col gap-2 w-full max-w-4xl mx-auto">
+                    <div className="flex flex-col gap-3 w-full max-w-4xl mx-auto">
                         {transcriptionHistory.map((item, index) => {
+                            if (item.speaker === 'user') return null;
                             const key = `hist-${index}`;
-                            const isUser = item.speaker === 'user';
                             return (
-                                <div key={key} className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                    <p 
+                                <div key={key} className="w-full flex justify-start">
+                                    <div 
                                         onClick={(e) => { e.stopPropagation(); handleCopy(item.text, key); }}
-                                        className={`text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-1 rounded-md transition-colors cursor-pointer hover:bg-slate-200/30 dark:hover:bg-white/10 ${isUser ? 'text-right' : 'text-left'}`}
+                                        className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20 bg-slate-200/30 dark:bg-slate-800/50"
+                                        aria-label="Copy message"
                                     >
-                                        <span className={`font-semibold ${isUser ? 'text-cyan-700 dark:text-cyan-400' : 'text-slate-700 dark:text-slate-300'}`}>
-                                            {isUser ? 'You: ' : 'Spark: '}
-                                        </span>
                                         {item.text}
                                         {copiedInfo?.index === key && <span className="text-green-500 dark:text-green-400 text-xs font-semibold ml-2">Copied!</span>}
-                                    </p>
+                                    </div>
                                 </div>
                             );
                         })}
-                       {currentUserText && (
-                            <div className="w-full flex justify-end">
-                                <p
-                                    onClick={(e) => { e.stopPropagation(); handleCopy(currentUserText, 'current-user'); }}
-                                    className="text-sm max-w-[80%] text-slate-600 dark:text-slate-400 p-1 rounded-md transition-colors cursor-pointer hover:bg-slate-200/30 dark:hover:bg-white/10 italic text-right"
-                                >
-                                    <span className="font-semibold text-cyan-700/80 dark:text-cyan-400/80">You: </span>
-                                    {currentUserText}
-                                    {copiedInfo?.index === 'current-user' && <span className="text-green-500 dark:text-green-400 text-xs font-semibold ml-2">Copied!</span>}
-                                </p>
-                            </div>
-                        )}
                         {currentModelText && (
                             <div className="w-full flex justify-start">
-                                 <p
+                                 <div
                                     onClick={(e) => { e.stopPropagation(); handleCopy(currentModelText, 'current-model'); }}
-                                    className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-1 rounded-md transition-colors cursor-pointer hover:bg-slate-200/30 dark:hover:bg-white/10 text-left"
+                                    className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20"
+                                    aria-label="Copy message"
                                 >
-                                    <span className="font-semibold text-slate-700 dark:text-slate-300">Spark: </span>
                                     {currentModelText}
                                     <span className="inline-block align-text-bottom w-px h-4 ml-1 border-r-2 border-cyan-400 animate-blink-caret"></span>
                                     {copiedInfo?.index === 'current-model' && <span className="text-green-500 dark:text-green-400 text-xs font-semibold ml-2">Copied!</span>}
-                                </p>
+                                </div>
                             </div>
                         )}
                     </div>
