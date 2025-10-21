@@ -1,43 +1,21 @@
 import React, { useRef, useEffect } from 'react';
 
-// NEW: Add sessionState to props
 interface ParticleRingProps {
   isActive: boolean;
   micVolume: number;
   sessionState: 'inactive' | 'initializing' | 'listening' | 'speaking';
 }
 
-// FIX: Define the Particle type to resolve the "Cannot find name 'Particle'" error.
-// The class implementation remains inside useEffect to capture variables from its scope.
-type Particle = {
-    theta: number;
-    y_offset: number;
-    radius: number;
-    x: number;
-    y: number;
-    z: number;
-    projectedScale: number;
-    projectedX: number;
-    projectedY: number;
-    update(state: {
-        rotation: number;
-        time: number;
-        micVolume: number;
-        sessionState: 'inactive' | 'initializing' | 'listening' | 'speaking';
-    }): void;
-    project(canvasWidth: number, canvasHeight: number): void;
-    draw(ctx: CanvasRenderingContext2D, isDarkMode: boolean): void;
-};
-
+// Re-purposing ParticleRing component for a new "Aurora Core" animation
 const ParticleRing: React.FC<ParticleRingProps> = ({ isActive, micVolume, sessionState }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationStateRef = useRef({
     micVolume: micVolume,
+    smoothedMicVolume: 0, // Added for fluid animation
     sessionState: sessionState,
     isActive: isActive,
-    particles: [] as Particle[],
-    rotation: 0,
     time: 0,
+    waves: [] as any[], // Using 'any' for the simple wave objects
   });
 
   // Keep the ref updated with the latest prop values for use in the animation loop
@@ -56,116 +34,117 @@ const ParticleRing: React.FC<ParticleRingProps> = ({ isActive, micVolume, sessio
     if (!ctx) return;
 
     let animationFrameId: number;
-    const numParticles = 300;
-    const baseRingRadius = window.innerWidth > 768 ? 120 : 80;
-    let perspective = 0; // Will be set on resize
 
-    class Particle {
-      theta: number; // Angle on the circle
-      y_offset: number; // Y offset for wave effect
-      radius: number;
-      
-      x: number = 0;
-      y: number = 0;
-      z: number = 0;
-
-      projectedScale: number = 1;
-      projectedX: number = 0;
-      projectedY: number = 0;
-
-      constructor(theta: number) {
-        this.theta = theta;
-        this.y_offset = Math.random() * 10 - 5;
-        this.radius = Math.random() * 1.5 + 0.5;
-      }
-
-      update(state: typeof animationStateRef.current) {
-        const { rotation, time, micVolume, sessionState } = state;
-
-        // Base circular motion
-        this.x = baseRingRadius * Math.cos(this.theta + rotation);
-        this.z = baseRingRadius * Math.sin(this.theta + rotation);
-
-        // Add dynamic vertical wave motion
-        const waveFrequency = 4;
-        const waveAmplitude = 20;
-        let dynamicAmplitude = 0;
-
-        if (sessionState === 'speaking') {
-            // Rhythmic pulse for speaking
-            dynamicAmplitude = (Math.sin(time * 5 + this.theta * 2) + 1) * 8;
-        } else if (sessionState === 'listening') {
-            // Sharp reaction to mic volume
-            dynamicAmplitude = micVolume * 80 * (Math.sin(time * 20 + this.theta * 5) + 1);
-        } else { // inactive or initializing
-            // Slow, gentle breathing
-            dynamicAmplitude = (Math.sin(time * 0.8 + this.theta) + 1) * 4;
+    const createWaves = (isDarkMode: boolean) => {
+        const waveCount = 5;
+        const newWaves = [];
+        for (let i = 0; i < waveCount; i++) {
+            newWaves.push({
+                // Wave properties
+                amplitude: 15 + Math.random() * 20,
+                frequency: 0.01 + Math.random() * 0.01,
+                speed: 0.005 + Math.random() * 0.005,
+                offset: Math.random() * 100,
+                noise: Math.random() * 0.1 + 0.95,
+                lineWidth: Math.random() * 1.5 + 0.5,
+                // Color based on theme
+                color: isDarkMode
+                    ? `hsla(${180 + i * 30 + Math.random() * 20}, 80%, 70%, ${0.3 + Math.random() * 0.3})`
+                    : `hsla(220, 50%, 60%, ${0.1 + Math.random() * 0.1})`,
+            });
         }
-
-        this.y = Math.sin(this.theta * waveFrequency + time) * waveAmplitude + this.y_offset + dynamicAmplitude;
-      }
-
-      project(canvasWidth: number, canvasHeight: number) {
-        this.projectedScale = perspective / (perspective + this.z);
-        this.projectedX = this.x * this.projectedScale + canvasWidth / 2;
-        this.projectedY = this.y * this.projectedScale + canvasHeight / 2;
-      }
-
-      draw(ctx: CanvasRenderingContext2D, isDarkMode: boolean) {
-        this.project(canvas.width, canvas.height);
-        
-        if (this.projectedX < 0 || this.projectedX > canvas.width || this.projectedY < 0 || this.projectedY > canvas.height) {
-            return;
-        }
-        
-        const alpha = Math.max(0, this.projectedScale * 0.8);
-        const radius = this.radius * this.projectedScale;
-        
-        ctx.beginPath();
-        if (isDarkMode) {
-            const hue = 180 + this.y * 2; // Color changes with vertical position
-            ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${alpha})`;
-            ctx.shadowColor = `hsla(${hue}, 80%, 70%, 0.5)`;
-            ctx.shadowBlur = 4;
-        } else {
-            ctx.fillStyle = `rgba(100, 116, 139, ${alpha * 0.7})`;
-        }
-        
-        ctx.arc(this.projectedX, this.projectedY, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
+        animationStateRef.current.waves = newWaves;
     }
-    
-    const init = () => {
-      animationStateRef.current.particles = [];
-      for (let i = 0; i < numParticles; i++) {
-        animationStateRef.current.particles.push(new Particle((i / numParticles) * Math.PI * 2));
-      }
-    };
 
     const animate = (timestamp: number) => {
         if (!ctx || !canvas) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         const state = animationStateRef.current;
-        const isDarkMode = document.documentElement.classList.contains('dark');
+        const width = canvas.width;
+        const height = canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const baseRadius = Math.min(width, height) * 0.2;
 
-        // Update time and rotation
+        ctx.clearRect(0, 0, width, height);
+
+        // Update time
         state.time = timestamp * 0.001;
-        const rotationSpeed = state.isActive ? 0.001 + state.micVolume * 0.005 : 0.0005;
-        state.rotation -= rotationSpeed;
+        const isDarkMode = document.documentElement.classList.contains('dark');
+        
+        // --- Smooth the mic volume for a more fluid visual response ---
+        const LERP_FACTOR = 0.1; // Easing factor: lower is smoother
+        state.smoothedMicVolume += (state.micVolume - state.smoothedMicVolume) * LERP_FACTOR;
 
-        // Sort particles by Z for 3D effect
-        state.particles.sort((a, b) => b.z - a.z);
+        // --- State-based behavior ---
+        let corePulse = Math.sin(state.time * 2) * 5;
+        let activityLevel = 0.1; // Base activity for idle state
 
-        // Update and draw each particle
-        state.particles.forEach(p => {
-            p.update(state);
-            p.draw(ctx, isDarkMode);
-        });
+        if (state.sessionState === 'listening') {
+            // Use the smoothed value to prevent jerky movements
+            activityLevel = 0.1 + state.smoothedMicVolume * 2.5;
+            corePulse = state.smoothedMicVolume * 40;
+        } else if (state.sessionState === 'speaking') {
+            activityLevel = 0.5 + (Math.sin(state.time * 8) + 1) / 2 * 0.6; // Rhythmic pulse
+            corePulse = 10 + (Math.sin(state.time * 8) + 1) * 10;
+        } else if (state.sessionState === 'initializing') {
+            activityLevel = 1.5; // Quick burst
+            corePulse = 30;
+        }
 
-        // Reset shadow for other UI elements
+        // Draw Central Core
+        const coreGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, baseRadius + corePulse);
+        if (isDarkMode) {
+            coreGradient.addColorStop(0, `hsla(180, 80%, 90%, 0.6)`);
+            coreGradient.addColorStop(0.5, `hsla(190, 80%, 70%, 0.3)`);
+            coreGradient.addColorStop(1, `hsla(220, 80%, 60%, 0)`);
+            ctx.shadowColor = 'hsla(190, 100%, 80%, 0.8)';
+            ctx.shadowBlur = 20;
+        } else {
+            coreGradient.addColorStop(0, 'rgba(100, 116, 139, 0.4)');
+            coreGradient.addColorStop(1, 'rgba(148, 163, 184, 0)');
+            ctx.shadowBlur = 0;
+        }
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, baseRadius + corePulse, 0, Math.PI * 2);
+        ctx.fillStyle = coreGradient;
+        ctx.fill();
         ctx.shadowBlur = 0;
+
+        // Draw Waves
+        if (isDarkMode) {
+            // Use 'lighter' for glowing effect in dark mode
+            ctx.globalCompositeOperation = 'lighter';
+        }
+
+        state.waves.forEach(wave => {
+            ctx.beginPath();
+            ctx.strokeStyle = wave.color;
+            ctx.lineWidth = wave.lineWidth * (1 + activityLevel * 0.5);
+            
+            for (let angle = 0; angle < Math.PI * 2; angle += 0.05) {
+                const xoff = Math.cos(angle) * wave.noise + state.time * 0.1;
+                const yoff = Math.sin(angle) * wave.noise + state.time * 0.1;
+
+                // A simple noise function might be too complex, let's use sin waves for pseudo-randomness
+                const noiseFactor = Math.sin(xoff * 5) + Math.sin(yoff * 3);
+
+                const r = baseRadius + wave.amplitude * activityLevel + noiseFactor * 15 * activityLevel;
+                const x = centerX + r * Math.cos(angle + state.time * wave.speed + wave.offset);
+                const y = centerY + r * Math.sin(angle + state.time * wave.speed + wave.offset);
+
+                if (angle === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.closePath();
+            ctx.stroke();
+        });
+        
+        ctx.globalCompositeOperation = 'source-over'; // Reset composite operation
 
         animationFrameId = requestAnimationFrame(animate);
     };
@@ -174,11 +153,22 @@ const ParticleRing: React.FC<ParticleRingProps> = ({ isActive, micVolume, sessio
         if (canvas && canvas.parentElement) {
             canvas.width = canvas.parentElement.offsetWidth;
             canvas.height = canvas.parentElement.offsetHeight;
-            perspective = canvas.width * 0.8;
-            init(); // Re-initialize on resize to adapt
+            const isDarkMode = document.documentElement.classList.contains('dark');
+            createWaves(isDarkMode); // Re-create waves with potentially new colors on resize/theme change
         }
     };
     
+    // Also handle theme changes
+    const observer = new MutationObserver((mutationsList) => {
+        for (const mutation of mutationsList) {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                handleResize();
+            }
+        }
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+
     window.addEventListener('resize', handleResize);
     handleResize();
     
@@ -188,6 +178,7 @@ const ParticleRing: React.FC<ParticleRingProps> = ({ isActive, micVolume, sessio
     return () => {
       cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', handleResize);
+      observer.disconnect();
     };
   }, []); // Empty dependency array to run effect only once on mount
 
