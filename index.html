@@ -4,6 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
     <title>AI Creative Suite</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -193,6 +196,21 @@
     animation: screen-bounce 0.4s ease-in-out;
   }
 
+  /* New animation for Download Prompt */
+  @keyframes slide-down-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .animate-slide-down-fade-in {
+    animation: slide-down-fade-in 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+
 </style>
 <script type="importmap">
 {
@@ -210,5 +228,16 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('ServiceWorker registration successful with scope: ', registration.scope);
+          }).catch(err => {
+            console.log('ServiceWorker registration failed: ', err);
+          });
+        });
+      }
+    </script>
   </body>
 </html>
