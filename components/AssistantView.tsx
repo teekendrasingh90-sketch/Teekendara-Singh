@@ -410,7 +410,7 @@ const AssistantView: React.FC = () => {
         } catch (err: any) {
             let errorMsg = err.message || 'Failed to start the session.';
             if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                errorMsg = 'Microphone permission was denied. Please allow it in your browser settings and try again.';
+                errorMsg = 'Microphone permission was denied. Please grant microphone access in your phone\'s settings and restart the app.';
             } else if (err.name === 'NotFoundError') {
                 errorMsg = 'No microphone was found on your device.';
             }
@@ -434,7 +434,7 @@ const AssistantView: React.FC = () => {
             } else if (permissionStatus.state === 'prompt') {
                 setShowPermissionModal(true);
             } else if (permissionStatus.state === 'denied') {
-                setError('Microphone permission was denied. Please enable it in your browser settings to use the assistant.');
+                setError('Microphone permission was denied. Please enable it in your phone\'s settings to use the assistant.');
                 setSessionState('inactive');
             }
         } catch (err) {
@@ -442,6 +442,19 @@ const AssistantView: React.FC = () => {
             setShowPermissionModal(true);
         }
     }, [startSession]);
+
+    useEffect(() => {
+        // On initial load, automatically try to get permission.
+        // This addresses the user's request to have the app ask for permission when it opens.
+        const timer = setTimeout(() => {
+            // Check if a session isn't already active to avoid re-triggering.
+            if (!isSessionActive) {
+                attemptToStartSession(false);
+            }
+        }, 500); // A small delay for the UI to settle before showing a modal.
+    
+        return () => clearTimeout(timer);
+    }, [attemptToStartSession, isSessionActive]);
 
     const handleRequestPermission = () => {
         setShowPermissionModal(false);
