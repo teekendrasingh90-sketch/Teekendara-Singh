@@ -266,6 +266,13 @@ const AssistantView: React.FC = () => {
                         setSessionState('listening');
                         if (!inputAudioContextRef.current || !mediaStreamRef.current) return;
 
+                        // FIX: Resume the audio context if it's suspended by the browser. This is a common
+                        // issue that can cause the audio stream to fail silently, leading to the session
+                        // closing immediately after starting.
+                        if (inputAudioContextRef.current.state === 'suspended') {
+                            inputAudioContextRef.current.resume();
+                        }
+
                         const source = inputAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
                         mediaStreamSourceRef.current = source;
 
