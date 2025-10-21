@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // FIX: Removed `LiveSession` as it is not an exported member of '@google/genai'.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
@@ -511,7 +510,7 @@ const AssistantView: React.FC = () => {
                 />
             )}
             <div className={`absolute inset-0 transition-transform duration-400 ease-in-out ${isBouncing ? 'scale-110' : 'scale-100'}`}>
-                <ParticleRing isActive={isSessionActive} micVolume={micVolume} />
+                <ParticleRing isActive={isSessionActive} micVolume={micVolume} sessionState={sessionState} />
             </div>
 
             <div className="absolute top-[20vh] left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none text-center">
