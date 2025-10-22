@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AssistantView, 
@@ -14,6 +15,7 @@ import {
   MicrophoneIcon, 
   ThemeIcon, 
   LogoutIcon,
+  DownloadIcon,
 } from './components/icons';
 
 
@@ -25,6 +27,7 @@ const App: React.FC = () => {
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
+  const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
 
@@ -45,6 +48,20 @@ const App: React.FC = () => {
     if (sessionExists) {
       setIsAuthenticated(true);
     }
+  }, []);
+
+  // Listen for PWA install prompt
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
   }, []);
 
   // Click outside handler for settings menu
@@ -86,6 +103,21 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setIsSettingsOpen(false); // Close menu on logout
     setIsFabMenuOpen(false); // Close FAB menu on logout
+  };
+
+  const handleInstallClick = async () => {
+    if (!installPromptEvent) {
+      return;
+    }
+    installPromptEvent.prompt();
+    const { outcome } = await installPromptEvent.userChoice;
+    if (outcome === 'accepted') {
+      console.log('User accepted the A2HS prompt');
+    } else {
+      console.log('User dismissed the A2HS prompt');
+    }
+    setInstallPromptEvent(null);
+    setIsSettingsOpen(false);
   };
 
   const openGenerator = (generator: View.Images | View.Thumbnail) => {
@@ -132,6 +164,20 @@ const App: React.FC = () => {
                               Switch to {theme === 'dark' ? 'Light' : 'Dark'}
                           </span>
                         </button>
+
+                        {/* Install App Button */}
+                        {installPromptEvent && (
+                          <button
+                            onClick={handleInstallClick}
+                            className="flex items-center gap-3 bg-cyan-500/10 dark:bg-cyan-500/20 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-cyan-500/20 dark:hover:bg-cyan-500/30 transition-all duration-300 border border-cyan-500/20 dark:border-cyan-500/30 shadow-lg transform hover:scale-105"
+                            aria-label="Install App"
+                          >
+                            <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                                <DownloadIcon className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                            </div>
+                            <span className="text-cyan-600 dark:text-cyan-400 font-semibold text-sm whitespace-nowrap">Download App</span>
+                          </button>
+                        )}
 
                         {/* Logout Button */}
                         <button
