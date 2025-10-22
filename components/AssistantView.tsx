@@ -3,7 +3,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import { generateSpeech } from '../services/geminiService';
 import ParticleRing from './ParticleRing';
-import PermissionModal from './PermissionModal';
 import { CopyIcon, CheckIcon } from './icons';
 
 // Audio helper functions from the guidelines
@@ -112,7 +111,6 @@ const AssistantView: React.FC = () => {
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
     const [micVolume, setMicVolume] = useState(0);
-    const [showPermissionModal, setShowPermissionModal] = useState(false);
     const [isBouncing, setIsBouncing] = useState(false);
     
     const [transcriptionHistory, setTranscriptionHistory] = useState<Transcription[]>([]);
@@ -134,7 +132,6 @@ const AssistantView: React.FC = () => {
     const userTurnTextRef = useRef('');
     const modelTurnTextRef = useRef('');
     const transcriptionContainerRef = useRef<HTMLDivElement>(null);
-    const initialLoadRef = useRef(true);
 
     // This effect creates a smooth animation loop to update the UI
     // without causing re-renders on every audio process event.
@@ -421,60 +418,17 @@ const AssistantView: React.FC = () => {
         }
     }, [stopSession]);
 
-    const attemptToStartSession = useCallback(async (withBounce: boolean) => {
-        if (withBounce) {
-            setIsBouncing(true);
-            setTimeout(() => setIsBouncing(false), 400);
-        }
-
-        try {
-            const permissionStatus = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-            if (permissionStatus.state === 'granted') {
-                playActivationSound();
-                setError(null);
-                startSession();
-            } else if (permissionStatus.state === 'prompt') {
-                setShowPermissionModal(true);
-            } else if (permissionStatus.state === 'denied') {
-                setError('Microphone permission was denied. Please enable it in your phone\'s settings to use the assistant.');
-                setSessionState('inactive');
-            }
-        } catch (err) {
-            console.error("Permission query failed, falling back to showing permission modal:", err);
-            setShowPermissionModal(true);
-        }
-    }, [startSession]);
-
-    useEffect(() => {
-        // On initial load, automatically try to get permission.
-        // This addresses the user's request to have the app ask for permission when it opens.
-        if (initialLoadRef.current) {
-            initialLoadRef.current = false;
-            const timer = setTimeout(() => {
-                // Check if a session isn't already active to avoid re-triggering.
-                if (!isSessionActive) {
-                    attemptToStartSession(false);
-                }
-            }, 500); // A small delay for the UI to settle before showing a modal.
-        
-            return () => clearTimeout(timer);
-        }
-    }, [attemptToStartSession, isSessionActive]);
-
-    const handleRequestPermission = () => {
-        setShowPermissionModal(false);
-        playActivationSound();
-        setError(null);
-        startSession();
-    };
-
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {
             stopSession();
         } else {
-            attemptToStartSession(true);
+            setIsBouncing(true);
+            setTimeout(() => setIsBouncing(false), 400);
+            playActivationSound();
+            setError(null);
+            startSession();
         }
-    }, [isSessionActive, stopSession, attemptToStartSession]);
+    }, [isSessionActive, stopSession, startSession]);
     
     const handleKeyDown = (event: React.KeyboardEvent) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -525,15 +479,6 @@ const AssistantView: React.FC = () => {
             tabIndex={0}
             aria-label={isSessionActive ? "Stop session" : "Start session"}
         >
-            {showPermissionModal && (
-                <PermissionModal 
-                    onAllow={handleRequestPermission}
-                    onDeny={() => {
-                        setShowPermissionModal(false);
-                        setSessionState('inactive');
-                    }}
-                />
-            )}
             <div className={`absolute inset-0 transition-transform duration-400 ease-in-out ${isBouncing ? 'scale-110' : 'scale-100'}`}>
                 <ParticleRing isActive={isSessionActive} micVolume={micVolume} sessionState={sessionState} />
             </div>
