@@ -12,5 +12,8 @@ export { default as ResetIcon } from './ResetIcon';
 export { default as SettingsIcon } from './SettingsIcon';
 export { default as SpinnerIcon } from './SpinnerIcon';
 export { default as ThemeIcon } from './ThemeIcon';
-export { default as ThumbnailIcon } from './ThumbnailIcon';
+// FIX: Export SpeakerIcon to make it available for import.
+export { default as SpeakerIcon } from './SpeakerIcon';
+// FIX: Export VideoIcon to make it available for import.
 export { default as VideoIcon } from './VideoIcon';
+export { default as SoundWaveIcon } from './SoundWaveIcon';

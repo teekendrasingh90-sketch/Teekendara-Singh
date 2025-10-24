@@ -1,8 +1,61 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { ImageStyle, AspectRatio } from '../types';
-import { generateImages, generatePromptFromImage } from '../services/geminiService';
-import { PhotoIcon, SpinnerIcon, EyeIcon, DownloadIcon, CopyIcon, CheckIcon, ResetIcon } from './icons';
+import { generateImages, generatePromptFromImage, generateSpeech } from '../services/geminiService';
+import { PhotoIcon, SpinnerIcon, EyeIcon, DownloadIcon, CopyIcon, CheckIcon, ResetIcon, SpeakerIcon } from './icons';
+
+// Helper function to decode base64
+function decode(base64: string): Uint8Array {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+}
+
+// Helper function to convert raw PCM to a WAV Blob
+function pcmToWavBlob(pcmData: Uint8Array): Blob {
+    const sampleRate = 24000;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const dataSize = pcmData.length;
+    const blockAlign = (numChannels * bitsPerSample) / 8;
+    const byteRate = sampleRate * blockAlign;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    const writeString = (view: DataView, offset: number, string: string) => {
+        for (let i = 0; i < string.length; i++) {
+            view.setUint8(offset + i, string.charCodeAt(i));
+        }
+    };
+
+    /* RIFF header */
+    writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(view, 8, 'WAVE');
+    /* "fmt " sub-chunk */
+    writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true); // 16 for PCM
+    view.setUint16(20, 1, true); // Audio format 1 for PCM
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    /* "data" sub-chunk */
+    writeString(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Write PCM data from the Uint8Array
+    for (let i = 0; i < pcmData.length; i++) {
+        view.setUint8(44 + i, pcmData[i]);
+    }
+
+    return new Blob([view.buffer], { type: 'audio/wav' });
+}
+
 
 const styles: ImageStyle[] = [ImageStyle.Realistic, ImageStyle.Ghibli, ImageStyle.ThreeD];
 
@@ -11,6 +64,14 @@ interface UploadedImage {
     mimeType: string;
     previewUrl: string; // data URL for <img>
 }
+
+const voices = [
+  { id: 'Charon', name: 'Charon (Male)' },
+  { id: 'Puck', name: 'Puck (Male)' },
+  { id: 'Fenrir', name: 'Fenrir (Male)' },
+  { id: 'Kore', name: 'Kore (Female)' },
+  { id: 'Zephyr', name: 'Zephyr (Female)' },
+];
 
 const ThumbnailGeneratorView: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
@@ -24,6 +85,22 @@ const ThumbnailGeneratorView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [placeholderCount, setPlaceholderCount] = useState<number>(0);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+
+  // Voice generation state
+  const [selectedVoice, setSelectedVoice] = useState<string>('Charon');
+  const [isGeneratingSpeech, setIsGeneratingSpeech] = useState<boolean>(false);
+  const [generatedAudioUrl, setGeneratedAudioUrl] = useState<string | null>(null);
+  const [audioError, setAudioError] = useState<string | null>(null);
+
+  // Clean up blob URL on unmount or when a new one is created
+  useEffect(() => {
+      return () => {
+          if (generatedAudioUrl) {
+              URL.revokeObjectURL(generatedAudioUrl);
+          }
+      };
+  }, [generatedAudioUrl]);
+
 
   const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -126,6 +203,9 @@ const ThumbnailGeneratorView: React.FC = () => {
     setGeneratedImages([]);
     setPlaceholderCount(0);
     setIsCopied(false);
+    setGeneratedAudioUrl(null);
+    setAudioError(null);
+    setSelectedVoice('Charon');
   };
 
   const handleDownload = (imageSrc: string, index: number) => {
@@ -143,6 +223,33 @@ const ThumbnailGeneratorView: React.FC = () => {
         setIsCopied(true);
         setTimeout(() => setIsCopied(false), 2000);
     });
+  };
+
+  const handleGenerateSpeech = async () => {
+    if (!prompt) {
+        setAudioError("Please enter a topic first to generate a voiceover.");
+        return;
+    }
+    setIsGeneratingSpeech(true);
+    setAudioError(null);
+    
+    // Revoke previous URL if it exists
+    if (generatedAudioUrl) {
+        URL.revokeObjectURL(generatedAudioUrl);
+        setGeneratedAudioUrl(null);
+    }
+
+    try {
+        const audioB64 = await generateSpeech(prompt, selectedVoice);
+        const pcmData = decode(audioB64);
+        const wavBlob = pcmToWavBlob(pcmData);
+        const audioUrl = URL.createObjectURL(wavBlob);
+        setGeneratedAudioUrl(audioUrl);
+    } catch (err: any) {
+        setAudioError(err.message || 'Failed to generate audio.');
+    } finally {
+        setIsGeneratingSpeech(false);
+    }
   };
 
   return (
@@ -216,6 +323,37 @@ const ThumbnailGeneratorView: React.FC = () => {
                         ))}
                     </div>
                 </div>
+
+                <div>
+                    <label className="block text-sm font-medium text-slate-800 dark:text-white mb-2">4. Voice</label>
+                    <select
+                        value={selectedVoice}
+                        onChange={(e) => setSelectedVoice(e.target.value)}
+                        className="w-full bg-slate-100 dark:bg-gray-900 border border-slate-300 dark:border-gray-700 rounded-lg p-3 focus:ring-2 focus:ring-slate-500 dark:focus:ring-white/50 focus:outline-none transition"
+                        disabled={isGeneratingSpeech || !prompt}
+                    >
+                        {voices.map(voice => (
+                            <option key={voice.id} value={voice.id}>{voice.name}</option>
+                        ))}
+                    </select>
+                    <button
+                        onClick={handleGenerateSpeech}
+                        disabled={isGeneratingSpeech || !prompt}
+                        className="mt-2 w-full bg-cyan-600 dark:bg-cyan-500 hover:bg-cyan-700 dark:hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        {isGeneratingSpeech ? <SpinnerIcon /> : <SpeakerIcon />}
+                        <span className="ml-2">{generatedAudioUrl ? 'Regenerate Audio' : 'Generate Audio'}</span>
+                    </button>
+                    {generatedAudioUrl && (
+                        <div className="mt-4">
+                            <audio controls src={generatedAudioUrl} className="w-full">
+                                Your browser does not support the audio element.
+                            </audio>
+                        </div>
+                    )}
+                    {audioError && <p className="text-red-500 dark:text-red-400 text-sm mt-2">{audioError}</p>}
+                </div>
+
 
                 <div className="flex items-center space-x-2 pt-2">
                     <button

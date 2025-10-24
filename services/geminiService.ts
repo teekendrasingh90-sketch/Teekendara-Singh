@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality } from "@google/genai";
 
 // This file was the primary suspect for the "blank screen" issue on deployment.
@@ -104,7 +103,11 @@ export const generatePromptFromImage = async (
     }
 };
 
-export const generateSpeech = async (text: string): Promise<string> => {
+// FIX: Added generateSpeech function to be used for text-to-speech generation.
+export const generateSpeech = async (
+    text: string,
+    voiceName: string
+): Promise<string> => {
     if (!process.env.API_KEY) {
         throw new Error("API Key not found. Please ensure it's configured in your deployment environment.");
     }
@@ -117,39 +120,38 @@ export const generateSpeech = async (text: string): Promise<string> => {
                 responseModalities: [Modality.AUDIO],
                 speechConfig: {
                     voiceConfig: {
-                      // Using Charon for consistency with AssistantView
-                      prebuiltVoiceConfig: { voiceName: 'Charon' },
+                        prebuiltVoiceConfig: { voiceName },
                     },
                 },
             },
         });
         const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
         if (!base64Audio) {
-            throw new Error("Model did not return audio data.");
+            throw new Error("Audio generation failed, no data returned.");
         }
         return base64Audio;
     } catch (error) {
         console.error("Error generating speech:", error);
-        throw new Error("Failed to generate speech.");
+        throw new Error("Failed to generate speech. Please check your API key and prompt.");
     }
 };
 
-// FIX: Added generateVideo function to handle video generation requests from VideoGeneratorView.
+// FIX: Added generateVideo function for text-to-video generation using Veo.
 export const generateVideo = async (
     prompt: string,
     resolution: '720p' | '1080p',
     aspectRatio: '16:9' | '9:16',
-    onProgress: (message: string) => void
+    updateLoadingMessage: (message: string) => void
 ): Promise<string> => {
-    // Per Veo guidelines, a new client should be instantiated for each call
-    // to ensure the latest API key from the aistudio dialog is used.
     if (!process.env.API_KEY) {
-        throw new Error("API Key not found. Please select one using the 'Select API Key' button.");
+        throw new Error("API Key not found. Please ensure it's configured in your deployment environment.");
     }
+    // A new GoogleGenAI instance must be created for each Veo call
+    // to ensure the latest API key from the selection dialog is used.
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
+    
     try {
-        onProgress('Sending request to the model...');
+        updateLoadingMessage("Starting video generation...");
         let operation = await ai.models.generateVideos({
             model: 'veo-3.1-fast-generate-preview',
             prompt,
@@ -160,36 +162,40 @@ export const generateVideo = async (
             }
         });
 
-        onProgress('Request received. Generating video... this can take a few minutes.');
-        
-        while (!operation.done) {
-            await new Promise(resolve => setTimeout(resolve, 10000)); // Poll every 10 seconds
-            onProgress('Checking video status...');
-            operation = await ai.operations.getVideosOperation({ operation: operation });
+        updateLoadingMessage("Processing your request... This may take a few minutes.");
+        let pollCount = 0;
+        const maxPolls = 30; // 5 minutes max wait time
+        while (!operation.done && pollCount < maxPolls) {
+            await new Promise(resolve => setTimeout(resolve, 10000));
+            operation = await ai.operations.getVideosOperation({ operation });
+            pollCount++;
+            updateLoadingMessage(`Checking status... (${pollCount * 10}s elapsed)`);
         }
 
-        onProgress('Video generated! Downloading...');
-        
+        if (!operation.done) {
+            throw new Error("Video generation timed out. Please try again with a simpler prompt.");
+        }
+
         const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
         if (!downloadLink) {
-            throw new Error("The model did not return a video URI.");
+            throw new Error("The model did not return a video. Please try again.");
         }
 
-        // Per Veo guidelines, API key must be appended to the download link.
-        const videoResponse = await fetch(`${downloadLink}&key=${process.env.API_KEY}`);
-        if (!videoResponse.ok) {
-            const errorText = await videoResponse.text();
-            console.error('Video download failed:', errorText);
-            throw new Error(`Failed to download video: ${videoResponse.statusText}`);
-        }
+        updateLoadingMessage("Fetching your video...");
+        // Append API key to the URI for access
+        const videoUrl = `${downloadLink}&key=${process.env.API_KEY}`;
         
+        // Fetch the video to convert it to a blob URL, which is safer for the <video> tag
+        const videoResponse = await fetch(videoUrl);
+        if (!videoResponse.ok) {
+            throw new Error(`Failed to fetch video data (status: ${videoResponse.status}).`);
+        }
         const videoBlob = await videoResponse.blob();
         return URL.createObjectURL(videoBlob);
 
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error generating video:", error);
-        // Rethrow the error to be handled by the component, which has specific logic
-        // for certain errors to reset the API key state.
+        // Rethrow to be caught by the component
         throw error;
     }
 };

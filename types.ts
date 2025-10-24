@@ -2,9 +2,7 @@
 export enum View {
   Assistant = 'Assistant',
   Images = 'Images',
-  Thumbnail = 'Thumbnail',
-  // FIX: Add Video view to enable video generator functionality.
-  Video = 'Video',
+  Voice = 'Voice',
 }
 
 export enum ImageStyle {

@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
-import { generateSpeech } from '../services/geminiService';
+// FIX: Removed unused import of generateSpeech which was causing an error.
 import ParticleRing from './ParticleRing';
 import { CopyIcon, CheckIcon } from './icons';
 
@@ -107,9 +107,10 @@ interface Transcription {
 
 interface AssistantViewProps {
   autoStart?: boolean;
+  selectedVoice: string;
 }
 
-const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false }) => {
+const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
@@ -257,7 +258,7 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false }) => {
                     outputAudioTranscription: {},
                     speechConfig: {
                         voiceConfig: {
-                          prebuiltVoiceConfig: { voiceName: 'Charon' },
+                          prebuiltVoiceConfig: { voiceName: selectedVoice },
                         },
                     },
                     tools: [{ functionDeclarations: [sendEmailFunctionDeclaration] }],
@@ -415,7 +416,7 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false }) => {
             setError(errorMsg);
             stopSession();
         }
-    }, [stopSession]);
+    }, [stopSession, selectedVoice]);
 
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {

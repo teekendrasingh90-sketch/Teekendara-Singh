@@ -1,23 +1,22 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AuthView,
   AssistantView, 
   ImageGeneratorView, 
-  ThumbnailGeneratorView,
-  VideoGeneratorView,
+  VoiceSelectionView,
 } from './components';
 import { View } from './types';
 import { 
   SettingsIcon, 
   PlusIcon, 
   PhotoIcon, 
-  ThumbnailIcon, 
   MicrophoneIcon, 
   ThemeIcon, 
   DownloadIcon,
-  VideoIcon,
   LogoutIcon,
+  SoundWaveIcon,
 } from './components/icons';
 
 
@@ -26,11 +25,13 @@ type Theme = 'light' | 'dark';
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
   const [startAssistant, setStartAssistant] = useState(false);
-  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Thumbnail | View.Video | null>(null);
+  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | null>(null);
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
+  const [selectedVoice, setSelectedVoice] = useState<string>(() => localStorage.getItem('spark-voice') || 'Charon');
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
+  const [assistantKey, setAssistantKey] = useState(0); // Key to force AssistantView remount
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
 
@@ -108,7 +109,7 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
   };
 
-  const openGenerator = (generator: View.Images | View.Thumbnail | View.Video) => {
+  const openGenerator = (generator: View.Images | View.Voice) => {
     setActiveGenerator(generator);
     setIsFabMenuOpen(false);
   };
@@ -128,6 +129,13 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setStartAssistant(false);
     setIsSettingsOpen(false);
+  };
+
+  const handleVoiceSelect = (voiceId: string) => {
+    setSelectedVoice(voiceId);
+    localStorage.setItem('spark-voice', voiceId);
+    setActiveGenerator(null); // Close the voice selection view
+    setAssistantKey(prev => prev + 1); // Trigger remount of AssistantView to apply voice and auto-start
   };
   
   if (!isAuthenticated) {
@@ -194,7 +202,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView autoStart={startAssistant} />
+        <AssistantView key={assistantKey} autoStart={startAssistant} selectedVoice={selectedVoice} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
@@ -216,10 +224,22 @@ const App: React.FC = () => {
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Spark</span>
               </button>
 
+              {/* Voice Selection Button */}
+              <button
+                onClick={() => openGenerator(View.Voice)}
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === View.Voice ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
+                aria-label="Voice Selection"
+              >
+                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                    <SoundWaveIcon className="h-5 w-5 text-slate-800 dark:text-white" />
+                 </div>
+                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Voice</span>
+              </button>
+
               {/* Image Generator Button */}
               <button
                 onClick={() => openGenerator(View.Images)}
-                className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border border-slate-300 dark:border-gray-700 shadow-lg transform hover:scale-105"
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === View.Images ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
                 aria-label="Image Generator"
               >
                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
@@ -228,29 +248,6 @@ const App: React.FC = () => {
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Image Generator</span>
               </button>
               
-              {/* Thumbnail Generator Button */}
-              <button
-                onClick={() => openGenerator(View.Thumbnail)}
-                className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border border-slate-300 dark:border-gray-700 shadow-lg transform hover:scale-105"
-                aria-label="Thumbnail Generator"
-              >
-                <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <ThumbnailIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Thumbnail Generator</span>
-              </button>
-
-              {/* Video Generator button */}
-              <button
-                onClick={() => openGenerator(View.Video)}
-                className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border border-slate-300 dark:border-gray-700 shadow-lg transform hover:scale-105"
-                aria-label="Video Generator"
-              >
-                <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <VideoIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Video Generator</span>
-              </button>
             </div>
             
             <button
@@ -279,8 +276,7 @@ const App: React.FC = () => {
               </button>
               <main className="mt-16 md:mt-8 relative">
                 {activeGenerator === View.Images && <ImageGeneratorView />}
-                {activeGenerator === View.Thumbnail && <ThumbnailGeneratorView />}
-                {activeGenerator === View.Video && <VideoGeneratorView />}
+                {activeGenerator === View.Voice && <VoiceSelectionView currentVoice={selectedVoice} onVoiceSelect={handleVoiceSelect} />}
               </main>
             </div>
           </div>
