@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AuthView,
@@ -7,7 +8,7 @@ import {
   ImageGeneratorView, 
   VoiceSelectionView,
 } from './components';
-import { View } from './types';
+import { View, voices } from './types';
 import { 
   SettingsIcon, 
   PlusIcon, 
@@ -34,6 +35,8 @@ const App: React.FC = () => {
   const [assistantKey, setAssistantKey] = useState(0); // Key to force AssistantView remount
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
+
+  const selectedVoiceDetails = voices.find(v => v.id === selectedVoice) || voices[0];
 
   // Apply theme class to HTML element
   useEffect(() => {
@@ -202,7 +205,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView key={assistantKey} autoStart={startAssistant} selectedVoice={selectedVoice} />
+        <AssistantView key={assistantKey} autoStart={startAssistant} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">

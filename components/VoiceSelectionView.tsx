@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generateSpeech } from '../services/geminiService';
+import { voices } from '../types';
 import { SpeakerIcon, SpinnerIcon, CheckIcon } from './icons';
 
 interface VoiceSelectionViewProps {
@@ -59,14 +60,6 @@ function pcmToWavBlob(pcmData: Uint8Array): Blob {
 
     return new Blob([view.buffer], { type: 'audio/wav' });
 }
-
-const voices = [
-  { id: 'Charon', name: 'Charon', gender: 'Male' },
-  { id: 'Puck', name: 'Puck', gender: 'Male' },
-  { id: 'Fenrir', name: 'Fenrir', gender: 'Male' },
-  { id: 'Kore', name: 'Kore', gender: 'Female' },
-  { id: 'Zephyr', name: 'Zephyr', gender: 'Female' },
-];
 
 const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, onVoiceSelect }) => {
     const [playingVoice, setPlayingVoice] = useState<string | null>(null);

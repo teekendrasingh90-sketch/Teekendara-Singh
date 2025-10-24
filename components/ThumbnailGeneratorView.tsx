@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { ImageStyle, AspectRatio } from '../types';
+import { ImageStyle, AspectRatio, voices } from '../types';
 import { generateImages, generatePromptFromImage, generateSpeech } from '../services/geminiService';
 import { PhotoIcon, SpinnerIcon, EyeIcon, DownloadIcon, CopyIcon, CheckIcon, ResetIcon, SpeakerIcon } from './icons';
 
@@ -64,14 +64,6 @@ interface UploadedImage {
     mimeType: string;
     previewUrl: string; // data URL for <img>
 }
-
-const voices = [
-  { id: 'Charon', name: 'Charon (Male)' },
-  { id: 'Puck', name: 'Puck (Male)' },
-  { id: 'Fenrir', name: 'Fenrir (Male)' },
-  { id: 'Kore', name: 'Kore (Female)' },
-  { id: 'Zephyr', name: 'Zephyr (Female)' },
-];
 
 const ThumbnailGeneratorView: React.FC = () => {
   const [prompt, setPrompt] = useState<string>('');
@@ -333,7 +325,7 @@ const ThumbnailGeneratorView: React.FC = () => {
                         disabled={isGeneratingSpeech || !prompt}
                     >
                         {voices.map(voice => (
-                            <option key={voice.id} value={voice.id}>{voice.name}</option>
+                            <option key={voice.id} value={voice.id}>{voice.name} ({voice.gender})</option>
                         ))}
                     </select>
                     <button
