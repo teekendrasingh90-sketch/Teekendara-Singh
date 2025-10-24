@@ -275,7 +275,7 @@ const ImageGeneratorView: React.FC = () => {
                 <div className="flex items-center space-x-2 pt-2">
                     <button
                         onClick={generatedImages.length > 0 ? handleRegenerate : handleGenerateClick}
-                        disabled={isLoading || isGeneratingPrompt || !uploadedImage}
+                        disabled={isLoading || !uploadedImage}
                         className="w-full bg-slate-800 dark:bg-white hover:bg-slate-700 dark:hover:bg-gray-200 text-white dark:text-black font-bold py-3 px-4 rounded-lg transition-transform transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     >
                         {isLoading ? <SpinnerIcon /> : (generatedImages.length > 0 ? 'Regenerate' : 'Generate')}
