@@ -6,11 +6,17 @@ import { GoogleGenAI, Modality } from "@google/genai";
 // By moving all logic that uses `process.env.API_KEY` inside the functions that are called by user actions, we ensure the app can load successfully.
 // If the API key is missing, the user will see an error message when they try to perform an action, instead of the app crashing on start.
 
+interface UploadedImagePayload {
+    data: string;
+    mimeType: string;
+}
+
 export const generateImages = async (
     prompt: string,
     numberOfImages: number,
     aspectRatio: '16:9' | '1:1' | '9:16',
-    uploadedImage?: { data: string; mimeType: string; }
+    uploadedImage?: UploadedImagePayload,
+    referenceImage?: UploadedImagePayload
 ): Promise<string[]> => {
     if (!process.env.API_KEY) {
         throw new Error("API Key not found. Please ensure it's configured in your deployment environment.");
@@ -19,16 +25,26 @@ export const generateImages = async (
     try {
         if (uploadedImage) {
             // Image-to-Image / Edit using gemini-2.5-flash-image
+            const parts: any[] = [
+                { inlineData: { data: uploadedImage.data, mimeType: uploadedImage.mimeType } },
+            ];
+
+            if (referenceImage) {
+                parts.push({ inlineData: { data: referenceImage.data, mimeType: referenceImage.mimeType } });
+            }
+            
+            // Add a more descriptive instruction if a reference image is present
+            const instruction = referenceImage 
+                ? `Edit the first image based on the text prompt. The second image is a reference; use it as described in the prompt. Text prompt: "${prompt}"`
+                : prompt;
+            parts.push({ text: instruction });
+
+
             // This model generates one image per call, so we make parallel requests.
             const generationPromises = Array(numberOfImages).fill(0).map(() =>
                 ai.models.generateContent({
                     model: 'gemini-2.5-flash-image',
-                    contents: {
-                        parts: [
-                            { inlineData: { data: uploadedImage.data, mimeType: uploadedImage.mimeType } },
-                            { text: prompt }
-                        ]
-                    },
+                    contents: { parts },
                     config: {
                         responseModalities: [Modality.IMAGE],
                     }
@@ -91,6 +107,49 @@ export const generateImages = async (
     }
 };
 
+export const editImageWithChat = async (
+    baseImage: UploadedImagePayload,
+    prompt: string,
+    referenceImage?: UploadedImagePayload
+): Promise<string> => {
+     if (!process.env.API_KEY) {
+        throw new Error("API Key not found. Please ensure it's configured in your deployment environment.");
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    try {
+        const parts: any[] = [
+            { inlineData: { data: baseImage.data, mimeType: baseImage.mimeType } },
+        ];
+
+        if (referenceImage) {
+            parts.push({ inlineData: { data: referenceImage.data, mimeType: referenceImage.mimeType } });
+        }
+        
+        const instruction = `Your task is to edit the main image based on the user's request. Follow the user's text prompt precisely. If another image is provided, it's a reference or an element to incorporate as described in the prompt. User's prompt: "${prompt}"`;
+        parts.push({ text: instruction });
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image',
+            contents: { parts },
+            config: {
+                responseModalities: [Modality.IMAGE],
+            }
+        });
+        
+        const imagePart = response.candidates?.[0]?.content?.parts.find(part => part.inlineData);
+        if (imagePart?.inlineData) {
+            const { mimeType, data } = imagePart.inlineData;
+            return `data:${mimeType};base64,${data}`;
+        } else {
+            throw new Error("The model did not return an image. This could be due to a safety policy violation.");
+        }
+
+    } catch (error) {
+        console.error("Error editing image with chat:", error);
+        throw new Error("Failed to edit image. The model may have refused to generate content for safety reasons.");
+    }
+};
 
 export const generatePromptFromImage = async (
     imageData: string,

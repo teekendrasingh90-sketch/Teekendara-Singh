@@ -1,4 +1,7 @@
 
+
+
+
 export { default as CheckIcon } from './CheckIcon';
 export { default as CopyIcon } from './CopyIcon';
 export { default as DownloadIcon } from './DownloadIcon';
@@ -17,3 +20,4 @@ export { default as SpeakerIcon } from './SpeakerIcon';
 // FIX: Export VideoIcon to make it available for import.
 export { default as VideoIcon } from './VideoIcon';
 export { default as SoundWaveIcon } from './SoundWaveIcon';
+export { default as ChatIcon } from './ChatIcon';
