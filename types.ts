@@ -3,6 +3,8 @@ export enum View {
   Assistant = 'Assistant',
   Images = 'Images',
   Voice = 'Voice',
+  Camera = 'Camera',
+  ScreenShare = 'ScreenShare',
 }
 
 export enum ImageStyle {

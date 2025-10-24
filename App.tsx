@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AuthView,
@@ -18,15 +19,19 @@ import {
   DownloadIcon,
   LogoutIcon,
   SoundWaveIcon,
+  CameraIcon,
+  DisplayIcon,
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
+type AssistantMode = 'voice' | 'camera' | 'screen';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
   const [startAssistant, setStartAssistant] = useState(false);
   const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | null>(null);
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('voice');
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
@@ -117,9 +122,11 @@ const App: React.FC = () => {
     setIsFabMenuOpen(false);
   };
 
-  const closeGeneratorAndMenu = () => {
+  const openAssistantMode = (mode: AssistantMode) => {
     setActiveGenerator(null);
+    setAssistantMode(mode);
     setIsFabMenuOpen(false);
+    setAssistantKey(prev => prev + 1); // Remount to start session in new mode
   };
 
   const handleLoginSuccess = () => {
@@ -205,7 +212,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView key={assistantKey} autoStart={startAssistant} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
+        <AssistantView key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
@@ -217,14 +224,38 @@ const App: React.FC = () => {
             >
               {/* Spark Assistant Button */}
               <button
-                onClick={closeGeneratorAndMenu}
-                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
+                onClick={() => openAssistantMode('voice')}
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null && assistantMode === 'voice' ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
                 aria-label="Spark Voice Assistant"
               >
                  <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
                     <MicrophoneIcon className="h-5 w-5 text-slate-800 dark:text-white" />
                  </div>
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Spark</span>
+              </button>
+              
+              {/* Camera Mode Button */}
+              <button
+                onClick={() => openAssistantMode('camera')}
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null && assistantMode === 'camera' ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
+                aria-label="Camera Mode"
+              >
+                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                    <CameraIcon className="h-5 w-5 text-slate-800 dark:text-white" />
+                 </div>
+                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Camera</span>
+              </button>
+              
+              {/* Screen Share Mode Button */}
+              <button
+                onClick={() => openAssistantMode('screen')}
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null && assistantMode === 'screen' ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
+                aria-label="Screen Share Mode"
+              >
+                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                    <DisplayIcon className="h-5 w-5 text-slate-800 dark:text-white" />
+                 </div>
+                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Screen Share</span>
               </button>
 
               {/* Voice Selection Button */}

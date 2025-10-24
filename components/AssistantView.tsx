@@ -1,12 +1,13 @@
 
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import { VoiceGender } from '../types';
 import ParticleRing from './ParticleRing';
 import { CopyIcon, CheckIcon } from './icons';
 
-// Audio helper functions from the guidelines
+// --- Helper Functions ---
+
+// Audio encoding/decoding from guidelines
 function encode(bytes: Uint8Array): string {
     let binary = '';
     const len = bytes.byteLength;
@@ -45,6 +46,19 @@ async function decodeAudioData(
     return buffer;
 }
 
+// Converts a canvas blob to a base64 string for the API
+const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = (reader.result as string).split(',')[1];
+            resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
+};
+
 // Function Declaration for sending email
 const sendEmailFunctionDeclaration: FunctionDeclaration = {
   name: 'sendEmail',
@@ -69,38 +83,27 @@ const sendEmailFunctionDeclaration: FunctionDeclaration = {
 const playActivationSound = () => {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (!audioCtx) return;
-
     const now = audioCtx.currentTime;
-    const duration = 0.1; // Short duration for a "pop"
-
-    // Gain node for a percussive envelope
+    const duration = 0.1;
     const gainNode = audioCtx.createGain();
     gainNode.connect(audioCtx.destination);
     gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.8, now + 0.005); // Very sharp attack
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration); // Fast decay
-
-    // Oscillator for the "pop" tone
+    gainNode.gain.linearRampToValueAtTime(0.8, now + 0.005);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     const oscillator = audioCtx.createOscillator();
-    oscillator.type = 'sine'; // Sine wave for a clean, pure tone
+    oscillator.type = 'sine';
     oscillator.connect(gainNode);
-    
-    // A rapid frequency sweep downwards
-    oscillator.frequency.setValueAtTime(900, now); // Start at a medium-high pitch
-    oscillator.frequency.exponentialRampToValueAtTime(200, now + duration * 0.9); // Drop quickly
-
+    oscillator.frequency.setValueAtTime(900, now);
+    oscillator.frequency.exponentialRampToValueAtTime(200, now + duration * 0.9);
     oscillator.start(now);
     oscillator.stop(now + duration);
-
-    setTimeout(() => {
-        if (audioCtx.state !== 'closed') {
-            audioCtx.close();
-        }
-    }, duration * 1000 + 50);
+    setTimeout(() => { if (audioCtx.state !== 'closed') { audioCtx.close(); } }, duration * 1000 + 50);
 };
 
 
 type SessionState = 'inactive' | 'initializing' | 'listening' | 'speaking';
+type AssistantMode = 'voice' | 'camera' | 'screen';
+
 interface Transcription {
     speaker: 'user' | 'model';
     text: string;
@@ -110,9 +113,10 @@ interface AssistantViewProps {
   autoStart?: boolean;
   selectedVoice: string;
   selectedVoiceGender: VoiceGender;
+  mode: AssistantMode;
 }
 
-const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice, selectedVoiceGender }) => {
+const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice, selectedVoiceGender, mode = 'voice' }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
@@ -138,9 +142,12 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
     const modelTurnTextRef = useRef('');
     const transcriptionContainerRef = useRef<HTMLDivElement>(null);
     const hasAutoStarted = useRef(false);
+    
+    // Refs for video/screen capture
+    const videoElRef = useRef<HTMLVideoElement>(null);
+    const canvasElRef = useRef<HTMLCanvasElement>(null);
+    const frameIntervalRef = useRef<number | null>(null);
 
-    // This effect creates a smooth animation loop to update the UI
-    // without causing re-renders on every audio process event.
     useEffect(() => {
         let animationFrameId: number;
         const animate = () => {
@@ -150,23 +157,13 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
         if (isSessionActive) {
             animationFrameId = requestAnimationFrame(animate);
         }
-        return () => {
-            cancelAnimationFrame(animationFrameId);
-            volumeRef.current = 0;
-            setMicVolume(0);
-        };
+        return () => { cancelAnimationFrame(animationFrameId); volumeRef.current = 0; setMicVolume(0); };
     }, [isSessionActive]);
     
-    // Auto-scroll transcription view
     useEffect(() => {
         const container = transcriptionContainerRef.current;
         if (container) {
-            setTimeout(() => {
-                container.scrollTo({
-                    top: container.scrollHeight,
-                    behavior: 'smooth'
-                });
-            }, 100);
+            setTimeout(() => { container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' }); }, 100);
         }
     }, [transcriptionHistory, currentUserText, currentModelText]);
 
@@ -174,39 +171,34 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
         sessionPromiseRef.current?.then(session => session.close());
         sessionPromiseRef.current = null;
         
-        if (outputAudioContextRef.current) {
-            outputSourcesRef.current.forEach(source => source.stop());
-            outputSourcesRef.current.clear();
+        if (frameIntervalRef.current) {
+            clearInterval(frameIntervalRef.current);
+            frameIntervalRef.current = null;
         }
 
-        if (outputGainNodeRef.current) {
-            outputGainNodeRef.current.disconnect();
-            outputGainNodeRef.current = null;
+        if (videoElRef.current) {
+            videoElRef.current.srcObject = null;
         }
-        
-        if (scriptProcessorRef.current) {
-            scriptProcessorRef.current.disconnect();
-            scriptProcessorRef.current = null;
-        }
-        if (mediaStreamSourceRef.current) {
-            mediaStreamSourceRef.current.disconnect();
-            mediaStreamSourceRef.current = null;
-        }
-        
-        if (mediaStreamRef.current) {
-            mediaStreamRef.current.getTracks().forEach(track => track.stop());
-            mediaStreamRef.current = null;
-        }
-        
-        if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
-            await inputAudioContextRef.current.close();
-        }
-        inputAudioContextRef.current = null;
 
-        if (outputAudioContextRef.current && outputAudioContextRef.current.state !== 'closed') {
-            await outputAudioContextRef.current.close();
-        }
-        outputAudioContextRef.current = null;
+        outputSourcesRef.current.forEach(source => source.stop());
+        outputSourcesRef.current.clear();
+
+        outputGainNodeRef.current?.disconnect();
+        scriptProcessorRef.current?.disconnect();
+        mediaStreamSourceRef.current?.disconnect();
+        
+        mediaStreamRef.current?.getTracks().forEach(track => track.stop());
+        
+        if (inputAudioContextRef.current?.state !== 'closed') await inputAudioContextRef.current?.close();
+        if (outputAudioContextRef.current?.state !== 'closed') await outputAudioContextRef.current?.close();
+
+        // Reset refs
+        Object.assign(inputAudioContextRef, { current: null });
+        Object.assign(outputAudioContextRef, { current: null });
+        Object.assign(mediaStreamRef, { current: null });
+        Object.assign(scriptProcessorRef, { current: null });
+        Object.assign(mediaStreamSourceRef, { current: null });
+        Object.assign(outputGainNodeRef, { current: null });
 
         setIsSessionActive(false);
         setSessionState('inactive');
@@ -222,27 +214,58 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
         setIsSessionActive(true);
         setSessionState('initializing');
         
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            const err = "Microphone access is not supported by your browser.";
-            setError(err);
-            setSessionState('inactive');
-            setIsSessionActive(false);
-            return;
+        if (!process.env.API_KEY) {
+            setError("API_KEY environment variable is not set");
+            return stopSession();
         }
         
-        if (!process.env.API_KEY) {
-            const err = "API_KEY environment variable is not set";
-            setError(err);
-            setSessionState('inactive');
-            setIsSessionActive(false);
-            return;
-        }
-
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            let stream: MediaStream;
+            if (mode === 'camera') {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'environment' } });
+            } else if (mode === 'screen') {
+                if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
+                    throw new Error("Screen sharing is not supported by your browser or requires a secure connection (HTTPS).");
+                }
+                stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
+            } else { // voice
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            }
             mediaStreamRef.current = stream;
 
+            // Start video playback and frame capture if in a visual mode
+            if ((mode === 'camera' || mode === 'screen') && videoElRef.current && canvasElRef.current) {
+                const videoEl = videoElRef.current;
+                videoEl.srcObject = stream;
+                videoEl.muted = true; // Mute local playback to avoid feedback
+                await videoEl.play();
+
+                const FRAME_RATE = 4; // Capture 4 frames per second
+                frameIntervalRef.current = window.setInterval(() => {
+                    const canvasEl = canvasElRef.current;
+                    if (!videoEl || !canvasEl || !sessionPromiseRef.current) return;
+                    
+                    const ctx = canvasEl.getContext('2d');
+                    if (!ctx) return;
+                    
+                    canvasEl.width = videoEl.videoWidth;
+                    canvasEl.height = videoEl.videoHeight;
+                    ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
+                    
+                    canvasEl.toBlob(async (blob) => {
+                        if (blob) {
+                            const base64Data = await blobToBase64(blob);
+                            sessionPromiseRef.current?.then((session) => {
+                                session.sendRealtimeInput({
+                                    media: { data: base64Data, mimeType: 'image/jpeg' }
+                                });
+                            });
+                        }
+                    }, 'image/jpeg', 0.8);
+                }, 1000 / FRAME_RATE);
+            }
+
+            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
             
@@ -252,24 +275,29 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
             
             nextStartTimeRef.current = 0;
 
-            const genderInstruction = selectedVoiceGender === 'Female'
-                ? "For a female voice, you MUST use feminine verb endings (e.g., 'कर सकती हूँ', 'जाऊंगी')."
-                : "For a male voice, use masculine verb endings (e.g., 'कर सकता हूँ', 'जाऊंगा').";
+            const genderInstruction = selectedVoiceGender === 'Female' ? "For a female voice, you MUST use feminine verb endings (e.g., 'कर सकती हूँ', 'जाऊंगी')." : "For a male voice, use masculine verb endings (e.g., 'कर सकता हूँ', 'जाऊंगा').";
 
-            sessionPromiseRef.current = ai.live.connect({
-                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    inputAudioTranscription: {},
-                    outputAudioTranscription: {},
-                    speechConfig: {
-                        voiceConfig: {
-                          prebuiltVoiceConfig: { voiceName: selectedVoice },
-                        },
-                    },
-                    tools: [{ functionDeclarations: [sendEmailFunctionDeclaration] }],
-                    systemInstruction: `You are Spark, an exceptionally advanced and personable AI assistant. Your core personality is modeled to be incredibly helpful, empathetic, and proactive, much like a real, thoughtful friend. Your primary directive is to sound completely natural and human, avoiding robotic or overly formal language at all costs.
+            let modeInstruction = '';
+            if (mode === 'camera') {
+                modeInstruction = `
+**Operational Mode: Camera**
+You are receiving a real-time video feed from the user's camera. Your primary task is continuous visual analysis.
+- **Dynamic Object Recognition:** Constantly observe the video stream. When a new, distinct object is presented, identify it and proactively describe it. Do not get "stuck" on a previous object. Your context must update with the video feed.
+- **User Interaction:** Respond to the user's questions about what you see. If they ask "What is this?", describe the object currently in view. If they ask you to compare objects, do so.
+- **Be Observant:** Acknowledge changes in the environment, lighting, or object orientation if relevant to the user's query. Your goal is to be an interactive visual assistant.
+`;
+            } else if (mode === 'screen') {
+                modeInstruction = `
+**Operational Mode: Screen Share**
+You are viewing the user's screen in real-time. Your goal is to assist them with their on-screen tasks.
+- **Analyze and Assist:** Understand the content on the screen—be it a website, application, or document. Help the user navigate, understand, or troubleshoot.
+- **Contextual Awareness:** Your answers must be based on what is visible on the screen. If the user asks "What should I click next?", analyze the UI and give a helpful suggestion.
+- **Read and Describe:** If asked, read text from the screen or describe images and layouts accurately.
+`;
+            }
 
+            const systemInstruction = `You are Spark, an exceptionally advanced and personable AI assistant. Your core personality is modeled to be incredibly helpful, empathetic, and proactive, much like a real, thoughtful friend. Your primary directive is to sound completely natural and human, avoiding robotic or overly formal language at all costs.
+${modeInstruction}
 **Conversational Style:**
 - **Friendly & Engaging Tone:** Your primary goal is to be a friendly and engaging conversational partner. Use a warm, positive, and enthusiastic tone. Phrases like "Absolutely, sir!", "Of course, sir, I'd be happy to help with that!", or "Great question, sir!" should be used where appropriate. Act like you are genuinely happy to assist.
 - **Gender-Aware Language (Hindi):** Based on the selected voice, your Hindi responses MUST use gender-appropriate grammar. ${genderInstruction} This is a strict rule to maintain a natural and immersive experience.
@@ -286,16 +314,24 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
 - If asked whether you can create images, thumbnails, and videos, you must confirm that you can, and then inform the user that the options are available below for them to see.
 
 **Tools:**
-You have a tool to send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.`,
+You have a tool to send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.`;
+
+            sessionPromiseRef.current = ai.live.connect({
+                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    inputAudioTranscription: {},
+                    outputAudioTranscription: {},
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
+                    tools: [{ functionDeclarations: [sendEmailFunctionDeclaration] }],
+                    systemInstruction,
                 },
                 callbacks: {
                     onopen: () => {
                         setSessionState('listening');
                         if (!inputAudioContextRef.current || !mediaStreamRef.current) return;
 
-                        if (inputAudioContextRef.current.state === 'suspended') {
-                            inputAudioContextRef.current.resume();
-                        }
+                        if (inputAudioContextRef.current.state === 'suspended') inputAudioContextRef.current.resume();
 
                         const source = inputAudioContextRef.current.createMediaStreamSource(mediaStreamRef.current);
                         mediaStreamSourceRef.current = source;
@@ -307,24 +343,13 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                             const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
                             
                             let sumSquares = 0.0;
-                            for (const amplitude of inputData) {
-                                sumSquares += amplitude * amplitude;
-                            }
-                            const rms = Math.sqrt(sumSquares / inputData.length);
-                            volumeRef.current = Math.max(rms, volumeRef.current * 0.7);
+                            for (const amplitude of inputData) { sumSquares += amplitude * amplitude; }
+                            volumeRef.current = Math.max(Math.sqrt(sumSquares / inputData.length), volumeRef.current * 0.7);
 
-                            const l = inputData.length;
-                            const int16 = new Int16Array(l);
-                            for (let i = 0; i < l; i++) {
-                                int16[i] = inputData[i] * 32768;
-                            }
-                            const pcmBlob: Blob = {
-                                data: encode(new Uint8Array(int16.buffer)),
-                                mimeType: 'audio/pcm;rate=16000',
-                            };
-                            sessionPromiseRef.current?.then((session) => {
-                                session.sendRealtimeInput({ media: pcmBlob });
-                            });
+                            const int16 = new Int16Array(inputData.length);
+                            for (let i = 0; i < inputData.length; i++) { int16[i] = inputData[i] * 32768; }
+                            const pcmBlob: Blob = { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' };
+                            sessionPromiseRef.current?.then((session) => { session.sendRealtimeInput({ media: pcmBlob }); });
                         };
                         source.connect(scriptProcessor);
                         scriptProcessor.connect(inputAudioContextRef.current.destination);
@@ -334,19 +359,9 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                             for (const fc of message.toolCall.functionCalls) {
                                 if (fc.name === 'sendEmail') {
                                     const { subject, body } = fc.args;
-                                    const recipient = 'teekendrasingh90@gmail.com';
-                                    const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject as string)}&body=${encodeURIComponent(body as string)}`;
-                                    
-                                    window.location.href = mailtoLink;
-
+                                    window.location.href = `mailto:teekendrasingh90@gmail.com?subject=${encodeURIComponent(subject as string)}&body=${encodeURIComponent(body as string)}`;
                                     sessionPromiseRef.current?.then((session) => {
-                                        session.sendToolResponse({
-                                            functionResponses: {
-                                                id : fc.id,
-                                                name: fc.name,
-                                                response: { result: "OK, the user's email client has been opened with the draft." },
-                                            }
-                                        });
+                                        session.sendToolResponse({ functionResponses: { id : fc.id, name: fc.name, response: { result: "OK, user's email client opened." } } });
                                     });
                                 }
                             }
@@ -355,11 +370,7 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                         if (message.serverContent?.outputTranscription) {
                             setSessionState('speaking');
                             const fullInput = userTurnTextRef.current.trim();
-                            if (fullInput) {
-                                setTranscriptionHistory(prev => [...prev, { speaker: 'user', text: fullInput }]);
-                                userTurnTextRef.current = '';
-                                setCurrentUserText('');
-                            }
+                            if (fullInput) { setTranscriptionHistory(prev => [...prev, { speaker: 'user', text: fullInput }]); userTurnTextRef.current = ''; setCurrentUserText(''); }
                             const chunk = message.serverContent.outputTranscription.text;
                             modelTurnTextRef.current += chunk;
                             setCurrentModelText(prev => prev + chunk);
@@ -370,17 +381,9 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                         
                         if (message.serverContent?.turnComplete) {
                             const fullInput = userTurnTextRef.current.trim();
-                            if (fullInput) {
-                                setTranscriptionHistory(prev => [...prev, { speaker: 'user', text: fullInput }]);
-                                userTurnTextRef.current = '';
-                                setCurrentUserText('');
-                            }
-
+                            if (fullInput) { setTranscriptionHistory(prev => [...prev, { speaker: 'user', text: fullInput }]); userTurnTextRef.current = ''; setCurrentUserText(''); }
                             const fullModelOutput = modelTurnTextRef.current.trim();
-                            if (fullModelOutput) {
-                                setTranscriptionHistory(prev => [...prev, { speaker: 'model', text: fullModelOutput }]);
-                            }
-                            
+                            if (fullModelOutput) { setTranscriptionHistory(prev => [...prev, { speaker: 'model', text: fullModelOutput }]); }
                             modelTurnTextRef.current = '';
                             setCurrentModelText('');
                             setSessionState('listening');
@@ -392,24 +395,16 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                                 const outputCtx = outputAudioContextRef.current;
                                 const outputNode = outputGainNodeRef.current;
                                 nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
-                                
                                 const audioBuffer = await decodeAudioData(decode(base64Audio), outputCtx, 24000, 1);
-                                
                                 const source = outputCtx.createBufferSource();
                                 source.buffer = audioBuffer;
                                 source.connect(outputNode);
-                                
                                 const currentSources = outputSourcesRef.current;
-                                source.addEventListener('ended', () => {
-                                    currentSources.delete(source);
-                                });
-                                
+                                source.addEventListener('ended', () => { currentSources.delete(source); });
                                 source.start(nextStartTimeRef.current);
                                 nextStartTimeRef.current += audioBuffer.duration;
                                 currentSources.add(source);
-                           } catch (audioError) {
-                                console.error("Error processing audio chunk:", audioError);
-                           }
+                           } catch (audioError) { console.error("Error processing audio chunk:", audioError); }
                         }
 
                         if (message.serverContent?.interrupted) {
@@ -420,27 +415,21 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                            modelTurnTextRef.current = '';
                         }
                     },
-                    onclose: () => {
-                        stopSession();
-                    },
-                    onerror: (e: ErrorEvent) => {
-                        const err = e.message || 'An unknown error occurred.';
-                        setError(err);
-                        stopSession();
-                    },
+                    onclose: stopSession,
+                    onerror: (e: ErrorEvent) => { setError(e.message || 'An unknown error occurred.'); stopSession(); },
                 },
             });
         } catch (err: any) {
             let errorMsg = err.message || 'Failed to start the session.';
-            if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-                errorMsg = 'Microphone permission was denied. Please grant microphone access in your phone\'s settings and restart the app.';
+            if (['NotAllowedError', 'PermissionDeniedError'].includes(err.name)) {
+                errorMsg = 'Permission was denied. Please grant access in your browser/phone settings and restart the app.';
             } else if (err.name === 'NotFoundError') {
-                errorMsg = 'No microphone was found on your device.';
+                errorMsg = 'No microphone/camera was found.';
             }
             setError(errorMsg);
             stopSession();
         }
-    }, [stopSession, selectedVoice, selectedVoiceGender]);
+    }, [stopSession, selectedVoice, selectedVoiceGender, mode]);
 
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {
@@ -461,30 +450,23 @@ You have a tool to send emails. If the user asks you to email them an answer, us
         }
     }, [autoStart, isSessionActive, toggleSession]);
     
-    const handleKeyDown = (event: React.KeyboardEvent) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault(); // Prevent scrolling on spacebar press
-            toggleSession();
-        }
-    };
-    
-    useEffect(() => {
-        return () => {
-            stopSession();
-        };
-    }, [stopSession]);
+    useEffect(() => () => stopSession(), [stopSession]);
 
     const getStatusText = () => {
-        if (error) return ''; // Error is displayed separately at the bottom
+        if (error) return '';
     
         switch (sessionState) {
             case 'initializing':
                 return 'Waking up...';
             case 'listening':
-                return 'Say something...';
+                 if (mode === 'camera') return 'Listening to camera...';
+                 if (mode === 'screen') return 'Analyzing screen...';
+                 return 'Say something...';
             case 'speaking':
-                return ''; // Hide text when assistant is speaking
+                return '';
             case 'inactive':
+                if (mode === 'camera') return 'Tap anywhere to start camera session';
+                if (mode === 'screen') return 'Tap anywhere to start screen share';
                 return 'Tap anywhere to start';
             default:
                 return '';
@@ -492,39 +474,39 @@ You have a tool to send emails. If the user asks you to email them an answer, us
     };
     
     const handleCopy = (textToCopy: string, indexKey: string) => {
-        if (!textToCopy) return;
         navigator.clipboard.writeText(textToCopy).then(() => {
             setCopiedInfo({ index: indexKey });
             setTimeout(() => setCopiedInfo(null), 2000);
-        }).catch(err => {
-            console.error('Failed to copy text: ', err);
-        });
+        }).catch(err => console.error('Failed to copy text: ', err));
     };
 
     return (
         <div 
             className={`bg-transparent fixed inset-0 flex flex-col items-center justify-center p-4 animate-fade-in cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500/50 rounded-lg ${isBouncing ? 'animate-screen-bounce' : ''}`}
             onClick={toggleSession}
-            onKeyDown={handleKeyDown}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && toggleSession()}
             role="button"
             tabIndex={0}
             aria-label={isSessionActive ? "Stop session" : "Start session"}
         >
+            {(mode === 'camera' || mode === 'screen') && (
+                <div className="absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden">
+                    <video ref={videoElRef} className={`w-full h-full ${mode === 'camera' ? 'object-cover' : 'object-contain'}`} playsInline />
+                </div>
+            )}
+            <canvas ref={canvasElRef} className="hidden" />
+
             <div className={`absolute inset-0 transition-transform duration-400 ease-in-out ${isBouncing ? 'scale-110' : 'scale-100'}`}>
                 <ParticleRing isActive={isSessionActive} micVolume={micVolume} sessionState={sessionState} />
             </div>
 
             <div className="absolute top-[20vh] left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none text-center">
-                <h2 className="text-3xl font-bold text-slate-700 dark:text-gray-300 transition-opacity duration-500 whitespace-nowrap">
+                <h2 className="text-3xl font-bold text-slate-700 dark:text-gray-300 transition-opacity duration-500 whitespace-nowrap bg-black/20 dark:bg-black/40 p-2 rounded-lg backdrop-blur-sm">
                     {getStatusText()}
                 </h2>
             </div>
             
-            <div 
-                className="fixed bottom-0 left-0 right-0 h-[25vh] max-h-60 pointer-events-none"
-                aria-live="polite"
-                aria-atomic="true"
-            >
+            <div className="fixed bottom-0 left-0 right-0 h-[25vh] max-h-60 pointer-events-none">
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-100/50 via-slate-100/20 to-transparent dark:from-black/80 dark:via-black/50" />
                 <div 
                     ref={transcriptionContainerRef}
@@ -532,27 +514,24 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                     <div className="flex flex-col gap-3 w-full max-w-4xl mx-auto">
-                        {transcriptionHistory.map((item, index) => {
-                            if (item.speaker === 'user') return null;
-                            const key = `hist-${index}`;
-                            return (
-                                <div key={key} className="w-full flex justify-start">
-                                    <div 
-                                        onClick={(e) => { e.stopPropagation(); handleCopy(item.text, key); }}
-                                        className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20 bg-slate-200/30 dark:bg-slate-800/50"
-                                        aria-label="Copy message"
-                                    >
-                                        {item.text}
-                                        {copiedInfo?.index === key && <span className="text-green-500 dark:text-green-400 text-xs font-semibold ml-2">Copied!</span>}
-                                    </div>
+                        {transcriptionHistory.map((item, index) => (
+                            item.speaker === 'user' ? null :
+                            <div key={`hist-${index}`} className="w-full flex justify-start">
+                                <div 
+                                    onClick={(e) => { e.stopPropagation(); handleCopy(item.text, `hist-${index}`); }}
+                                    className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20 bg-slate-200/30 dark:bg-slate-800/50 backdrop-blur-sm"
+                                    aria-label="Copy message"
+                                >
+                                    {item.text}
+                                    {copiedInfo?.index === `hist-${index}` && <span className="text-green-500 dark:text-green-400 text-xs font-semibold ml-2">Copied!</span>}
                                 </div>
-                            );
-                        })}
+                            </div>
+                        ))}
                         {currentModelText && (
                             <div className="w-full flex justify-start">
                                  <div
                                     onClick={(e) => { e.stopPropagation(); handleCopy(currentModelText, 'current-model'); }}
-                                    className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20"
+                                    className="text-sm max-w-[80%] text-slate-800 dark:text-slate-200 p-2 rounded-lg transition-colors cursor-pointer hover:bg-slate-200/50 dark:hover:bg-white/20 bg-slate-200/30 dark:bg-slate-800/50 backdrop-blur-sm"
                                     aria-label="Copy message"
                                 >
                                     {currentModelText}
@@ -565,7 +544,7 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                 </div>
             </div>
 
-            {error && <p className="absolute bottom-24 text-red-500 dark:text-red-400 text-sm px-4 text-center pointer-events-none">{error}</p>}
+            {error && <p className="absolute bottom-24 text-red-500 dark:text-red-400 text-sm px-4 text-center pointer-events-none bg-black/20 dark:bg-black/40 p-2 rounded-lg backdrop-blur-sm">{error}</p>}
         </div>
     );
 };

@@ -2,6 +2,8 @@
 
 
 
+
+
 export { default as CheckIcon } from './CheckIcon';
 export { default as CopyIcon } from './CopyIcon';
 export { default as DownloadIcon } from './DownloadIcon';
@@ -21,3 +23,5 @@ export { default as SpeakerIcon } from './SpeakerIcon';
 export { default as VideoIcon } from './VideoIcon';
 export { default as SoundWaveIcon } from './SoundWaveIcon';
 export { default as ChatIcon } from './ChatIcon';
+export { default as CameraIcon } from './CameraIcon';
+export { default as DisplayIcon } from './DisplayIcon';
