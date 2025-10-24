@@ -1,5 +1,5 @@
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-// FIX: Removed `LiveSession` as it is not an exported member of '@google/genai'.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import { generateSpeech } from '../services/geminiService';
 import ParticleRing from './ParticleRing';
@@ -31,7 +31,6 @@ async function decodeAudioData(
     sampleRate: number,
     numChannels: number,
 ): Promise<AudioBuffer> {
-    // FIX: Corrected typo from Int116Array to Int16Array.
     const dataInt16 = new Int16Array(data.buffer);
     const frameCount = dataInt16.length / numChannels;
     const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
@@ -106,7 +105,11 @@ interface Transcription {
     text: string;
 }
 
-const AssistantView: React.FC = () => {
+interface AssistantViewProps {
+  autoStart?: boolean;
+}
+
+const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
@@ -118,7 +121,6 @@ const AssistantView: React.FC = () => {
     const [currentModelText, setCurrentModelText] = useState('');
     const [copiedInfo, setCopiedInfo] = useState<{ index: string } | null>(null);
 
-    // FIX: Replaced `LiveSession` with `any` as the type is not exported from the library.
     const sessionPromiseRef = useRef<Promise<any> | null>(null);
     const inputAudioContextRef = useRef<AudioContext | null>(null);
     const outputAudioContextRef = useRef<AudioContext | null>(null);
@@ -132,6 +134,7 @@ const AssistantView: React.FC = () => {
     const userTurnTextRef = useRef('');
     const modelTurnTextRef = useRef('');
     const transcriptionContainerRef = useRef<HTMLDivElement>(null);
+    const hasAutoStarted = useRef(false);
 
     // This effect creates a smooth animation loop to update the UI
     // without causing re-renders on every audio process event.
@@ -265,9 +268,6 @@ const AssistantView: React.FC = () => {
                         setSessionState('listening');
                         if (!inputAudioContextRef.current || !mediaStreamRef.current) return;
 
-                        // FIX: Resume the audio context if it's suspended by the browser. This is a common
-                        // issue that can cause the audio stream to fail silently, leading to the session
-                        // closing immediately after starting.
                         if (inputAudioContextRef.current.state === 'suspended') {
                             inputAudioContextRef.current.resume();
                         }
@@ -310,7 +310,6 @@ const AssistantView: React.FC = () => {
                                 if (fc.name === 'sendEmail') {
                                     const { subject, body } = fc.args;
                                     const recipient = 'teekendrasingh90@gmail.com';
-                                    // FIX: Cast `subject` and `body` to string to satisfy `encodeURIComponent`.
                                     const mailtoLink = `mailto:${recipient}?subject=${encodeURIComponent(subject as string)}&body=${encodeURIComponent(body as string)}`;
                                     
                                     window.location.href = mailtoLink;
@@ -429,6 +428,13 @@ const AssistantView: React.FC = () => {
             startSession();
         }
     }, [isSessionActive, stopSession, startSession]);
+
+    useEffect(() => {
+        if (autoStart && !isSessionActive && !hasAutoStarted.current) {
+            hasAutoStarted.current = true;
+            toggleSession();
+        }
+    }, [autoStart, isSessionActive, toggleSession]);
     
     const handleKeyDown = (event: React.KeyboardEvent) => {
         if (event.key === 'Enter' || event.key === ' ') {

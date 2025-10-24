@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
+  AuthView,
   AssistantView, 
   ImageGeneratorView, 
-  ThumbnailGeneratorView, 
-  AuthView
+  ThumbnailGeneratorView,
+  VideoGeneratorView,
 } from './components';
 import { View } from './types';
 import { 
@@ -14,16 +15,18 @@ import {
   ThumbnailIcon, 
   MicrophoneIcon, 
   ThemeIcon, 
-  LogoutIcon,
   DownloadIcon,
+  VideoIcon,
+  LogoutIcon,
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Thumbnail | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
+  const [startAssistant, setStartAssistant] = useState(false);
+  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Thumbnail | View.Video | null>(null);
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(() => (localStorage.getItem('spark-theme') as Theme) || 'dark');
@@ -41,14 +44,6 @@ const App: React.FC = () => {
     }
     localStorage.setItem('spark-theme', theme);
   }, [theme]);
-
-  // Check for session on initial load
-  useEffect(() => {
-    const sessionExists = localStorage.getItem('spark-session');
-    if (sessionExists) {
-      setIsAuthenticated(true);
-    }
-  }, []);
 
   // Listen for PWA install prompt
   useEffect(() => {
@@ -98,13 +93,6 @@ const App: React.FC = () => {
     };
   }, [isFabMenuOpen]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('spark-session');
-    setIsAuthenticated(false);
-    setIsSettingsOpen(false); // Close menu on logout
-    setIsFabMenuOpen(false); // Close FAB menu on logout
-  };
-
   const handleInstallClick = async () => {
     if (!installPromptEvent) {
       return;
@@ -120,7 +108,7 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
   };
 
-  const openGenerator = (generator: View.Images | View.Thumbnail) => {
+  const openGenerator = (generator: View.Images | View.Thumbnail | View.Video) => {
     setActiveGenerator(generator);
     setIsFabMenuOpen(false);
   };
@@ -129,13 +117,23 @@ const App: React.FC = () => {
     setActiveGenerator(null);
     setIsFabMenuOpen(false);
   };
-  
-  // Render AuthView if not authenticated
-  if (!isAuthenticated) {
-    return <AuthView onLoginSuccess={() => setIsAuthenticated(true)} />;
-  }
 
-  // Render main app if authenticated
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+    setStartAssistant(true);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('spark-auth-session');
+    setIsAuthenticated(false);
+    setStartAssistant(false);
+    setIsSettingsOpen(false);
+  };
+  
+  if (!isAuthenticated) {
+    return <AuthView onLoginSuccess={handleLoginSuccess} />;
+  }
+  
   return (
     <div className="relative min-h-screen w-full bg-transparent overflow-hidden text-slate-800 dark:text-slate-200">
         {/* Settings Button and Menu */}
@@ -178,17 +176,17 @@ const App: React.FC = () => {
                             <span className="text-cyan-600 dark:text-cyan-400 font-semibold text-sm whitespace-nowrap">Download App</span>
                           </button>
                         )}
-
+                        
                         {/* Logout Button */}
                         <button
                           onClick={handleLogout}
                           className="flex items-center gap-3 bg-red-500/10 dark:bg-red-500/20 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-red-500/20 dark:hover:bg-red-500/30 transition-all duration-300 border border-red-500/20 dark:border-red-500/30 shadow-lg transform hover:scale-105"
                           aria-label="Logout"
                         >
-                          <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                              <LogoutIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
-                          </div>
-                          <span className="text-red-600 dark:text-red-400 font-semibold text-sm whitespace-nowrap">Logout</span>
+                            <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                                <LogoutIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
+                            </div>
+                            <span className="text-red-600 dark:text-red-400 font-semibold text-sm whitespace-nowrap">Logout</span>
                         </button>
                     </div>
                 </div>
@@ -196,7 +194,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView />
+        <AssistantView autoStart={startAssistant} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
@@ -241,6 +239,18 @@ const App: React.FC = () => {
                 </div>
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Thumbnail Generator</span>
               </button>
+
+              {/* Video Generator button */}
+              <button
+                onClick={() => openGenerator(View.Video)}
+                className="flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border border-slate-300 dark:border-gray-700 shadow-lg transform hover:scale-105"
+                aria-label="Video Generator"
+              >
+                <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                    <VideoIcon className="h-5 w-5 text-slate-800 dark:text-white" />
+                </div>
+                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Video Generator</span>
+              </button>
             </div>
             
             <button
@@ -270,6 +280,7 @@ const App: React.FC = () => {
               <main className="mt-16 md:mt-8 relative">
                 {activeGenerator === View.Images && <ImageGeneratorView />}
                 {activeGenerator === View.Thumbnail && <ThumbnailGeneratorView />}
+                {activeGenerator === View.Video && <VideoGeneratorView />}
               </main>
             </div>
           </div>
