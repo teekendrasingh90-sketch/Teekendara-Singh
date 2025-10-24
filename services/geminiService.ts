@@ -52,28 +52,42 @@ export const generateImages = async (
             return images;
 
         } else {
-            // Text-to-Image using Imagen
-            const response = await ai.models.generateImages({
-                model: 'imagen-4.0-generate-001',
-                prompt,
-                config: {
-                    numberOfImages,
-                    outputMimeType: 'image/jpeg',
-                    aspectRatio,
-                },
-            });
+            // Text-to-Image using gemini-2.5-flash-image to ensure compatibility with user's API key.
+            // This model is generally available and avoids permission issues seen with more specialized models like Imagen.
+            const generationPromises = Array(numberOfImages).fill(0).map(() =>
+                ai.models.generateContent({
+                    model: 'gemini-2.5-flash-image',
+                    contents: {
+                        parts: [
+                            // Instruct the model about the desired aspect ratio within the prompt itself.
+                            { text: `${prompt}. The final generated image MUST have a strict aspect ratio of ${aspectRatio}.` }
+                        ]
+                    },
+                    config: {
+                        responseModalities: [Modality.IMAGE],
+                    }
+                })
+            );
 
-            if (response.generatedImages && response.generatedImages.length > 0) {
-                return response.generatedImages.map(img => {
-                    const base64ImageBytes: string = img.image.imageBytes;
-                    return `data:image/jpeg;base64,${base64ImageBytes}`;
-                });
+            const responses = await Promise.all(generationPromises);
+
+            const images = responses.flatMap(response =>
+                response.candidates?.[0]?.content?.parts
+                    .filter(part => part.inlineData)
+                    .map(part => {
+                        const { mimeType, data } = part.inlineData!;
+                        return `data:${mimeType};base64,${data}`;
+                    }) || []
+            );
+
+            if (images.length === 0) {
+                throw new Error("The model did not return any images. This could be due to a safety policy or a problem with the prompt.");
             }
-            return [];
+            return images;
         }
     } catch (error) {
         console.error("Error generating images:", error);
-        throw new Error("Failed to generate images. Please check your API key and prompt.");
+        throw new Error("Failed to generate images. Please check your API key and prompt. The model may have refused to generate content for safety reasons.");
     }
 };
 
