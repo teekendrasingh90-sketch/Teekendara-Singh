@@ -79,7 +79,7 @@ const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, o
         setPlayingVoice(voiceId);
         setError(null);
         try {
-            const text = `Hello, my name is ${voiceName}. This is what I sound like.`;
+            const text = `Hello, this is what ${voiceName.toLowerCase()} sounds like.`;
             const audioB64 = await generateSpeech(text, voiceId);
             
             const pcmData = decode(audioB64);

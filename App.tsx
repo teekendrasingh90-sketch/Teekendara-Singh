@@ -1,7 +1,5 @@
 
 
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AuthView,
@@ -20,12 +18,12 @@ import {
   LogoutIcon,
   SoundWaveIcon,
   CameraIcon,
-  DisplayIcon,
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
-type AssistantMode = 'voice' | 'camera' | 'screen';
+type AssistantMode = 'voice' | 'camera';
+export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
@@ -128,6 +126,27 @@ const App: React.FC = () => {
     setIsFabMenuOpen(false);
     setAssistantKey(prev => prev + 1); // Remount to start session in new mode
   };
+  
+  const handleNavigationCommand = (target: NavigationTarget) => {
+    switch(target) {
+        case 'camera':
+            openAssistantMode('camera');
+            break;
+        case 'voice':
+            openGenerator(View.Voice);
+            break;
+        case 'images':
+            openGenerator(View.Images);
+            break;
+        case 'spark':
+            openAssistantMode('voice');
+            break;
+        case 'close':
+            // Simply returning to spark mode handles closing the active generator
+            openAssistantMode('voice');
+            break;
+    }
+  };
 
   const handleLoginSuccess = () => {
     setIsAuthenticated(true);
@@ -212,7 +231,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
+        <AssistantView onNavigate={handleNavigationCommand} onVoiceChange={handleVoiceSelect} key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
@@ -246,18 +265,6 @@ const App: React.FC = () => {
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Camera</span>
               </button>
               
-              {/* Screen Share Mode Button */}
-              <button
-                onClick={() => openAssistantMode('screen')}
-                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null && assistantMode === 'screen' ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
-                aria-label="Screen Share Mode"
-              >
-                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <DisplayIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                 </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Screen Share</span>
-              </button>
-
               {/* Voice Selection Button */}
               <button
                 onClick={() => openGenerator(View.Voice)}
@@ -302,7 +309,7 @@ const App: React.FC = () => {
           <div className="fixed inset-0 z-40 bg-slate-50/80 dark:bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto text-gray-800 dark:text-gray-100 font-sans">
             <div className="container mx-auto px-4 py-8 pb-28">
               <button 
-                onClick={() => setActiveGenerator(null)} 
+                onClick={() => { setActiveGenerator(null); setAssistantKey(prev => prev + 1); }} 
                 className="fixed top-4 right-4 bg-slate-200/70 dark:bg-gray-800/70 backdrop-blur-sm p-2 rounded-full hover:bg-slate-300/80 dark:hover:bg-gray-700/80 transition-colors duration-300 border border-slate-300 dark:border-gray-700 z-50"
                 aria-label="Close generator"
               >

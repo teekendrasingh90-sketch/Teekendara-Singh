@@ -1,9 +1,12 @@
 
+
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
-import { VoiceGender } from '../types';
+// FIX: Aliased `Blob` to `GenAIBlob` to resolve name collision with the browser's native `Blob` type.
+import { GoogleGenAI, LiveServerMessage, Modality, Blob as GenAIBlob, FunctionDeclaration, Type } from '@google/genai';
+import { VoiceGender, voices } from '../types';
 import ParticleRing from './ParticleRing';
 import { CopyIcon, CheckIcon } from './icons';
+import { NavigationTarget } from '../App';
 
 // --- Helper Functions ---
 
@@ -79,6 +82,53 @@ const sendEmailFunctionDeclaration: FunctionDeclaration = {
   },
 };
 
+// Function Declarations for UI Navigation
+const openCameraFunction: FunctionDeclaration = {
+  name: 'open_camera_mode',
+  description: 'Switches the assistant to camera mode to analyze the video feed.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+const openVoiceSelectionFunction: FunctionDeclaration = {
+  name: 'open_voice_selection',
+  description: 'Opens the voice selection screen for the user to choose a new voice for the assistant.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+const openImageGeneratorFunction: FunctionDeclaration = {
+  name: 'open_image_generator',
+  description: 'Opens the image generator tool for the user to create or edit images.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+const openSparkModeFunction: FunctionDeclaration = {
+  name: 'open_spark_mode',
+  description: 'Switches the assistant back to the default voice-only conversation mode.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+const closeCurrentViewFunction: FunctionDeclaration = {
+  name: 'close_current_view',
+  description: 'Closes the currently open tool or view, such as the Image Generator or Voice Selection, and returns to the main assistant screen.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+const selectVoiceByNumberFunction: FunctionDeclaration = {
+  name: 'select_voice_by_number',
+  description: 'Selects the assistant voice by its number (1 through 5).',
+  parameters: {
+    type: Type.OBJECT,
+    properties: {
+      voiceNumber: {
+        type: Type.INTEGER,
+        description: 'The number of the voice to select, from 1 to 5.',
+      },
+    },
+    required: ['voiceNumber'],
+  },
+};
+
+
 // A clean, quick "pop" for system activation, matching the new sound effect.
 const playActivationSound = () => {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -102,7 +152,7 @@ const playActivationSound = () => {
 
 
 type SessionState = 'inactive' | 'initializing' | 'listening' | 'speaking';
-type AssistantMode = 'voice' | 'camera' | 'screen';
+type AssistantMode = 'voice' | 'camera';
 
 interface Transcription {
     speaker: 'user' | 'model';
@@ -114,9 +164,11 @@ interface AssistantViewProps {
   selectedVoice: string;
   selectedVoiceGender: VoiceGender;
   mode: AssistantMode;
+  onNavigate: (target: NavigationTarget) => void;
+  onVoiceChange: (voiceId: string) => void;
 }
 
-const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice, selectedVoiceGender, mode = 'voice' }) => {
+const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice, selectedVoiceGender, mode = 'voice', onNavigate, onVoiceChange }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
@@ -223,18 +275,13 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
             let stream: MediaStream;
             if (mode === 'camera') {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'environment' } });
-            } else if (mode === 'screen') {
-                if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== 'function') {
-                    throw new Error("Screen sharing is not supported by your browser or requires a secure connection (HTTPS).");
-                }
-                stream = await navigator.mediaDevices.getDisplayMedia({ audio: true, video: true });
             } else { // voice
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
             mediaStreamRef.current = stream;
 
             // Start video playback and frame capture if in a visual mode
-            if ((mode === 'camera' || mode === 'screen') && videoElRef.current && canvasElRef.current) {
+            if (mode === 'camera' && videoElRef.current && canvasElRef.current) {
                 const videoEl = videoElRef.current;
                 videoEl.srcObject = stream;
                 videoEl.muted = true; // Mute local playback to avoid feedback
@@ -286,14 +333,6 @@ You are receiving a real-time video feed from the user's camera. Your primary ta
 - **User Interaction:** Respond to the user's questions about what you see. If they ask "What is this?", describe the object currently in view. If they ask you to compare objects, do so.
 - **Be Observant:** Acknowledge changes in the environment, lighting, or object orientation if relevant to the user's query. Your goal is to be an interactive visual assistant.
 `;
-            } else if (mode === 'screen') {
-                modeInstruction = `
-**Operational Mode: Screen Share**
-You are viewing the user's screen in real-time. Your goal is to assist them with their on-screen tasks.
-- **Analyze and Assist:** Understand the content on the screen—be it a website, application, or document. Help the user navigate, understand, or troubleshoot.
-- **Contextual Awareness:** Your answers must be based on what is visible on the screen. If the user asks "What should I click next?", analyze the UI and give a helpful suggestion.
-- **Read and Describe:** If asked, read text from the screen or describe images and layouts accurately.
-`;
             }
 
             const systemInstruction = `You are Spark, an exceptionally advanced and personable AI assistant. Your core personality is modeled to be incredibly helpful, empathetic, and proactive, much like a real, thoughtful friend. Your primary directive is to sound completely natural and human, avoiding robotic or overly formal language at all costs.
@@ -314,7 +353,16 @@ ${modeInstruction}
 - If asked whether you can create images, thumbnails, and videos, you must confirm that you can, and then inform the user that the options are available below for them to see.
 
 **Tools:**
-You have a tool to send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.`;
+You have tools to control the application.
+- **Email:** You can send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.
+- **UI Navigation:** You can navigate the app.
+  - If the user says "camera on karo" or "open camera", use the 'open_camera_mode' function.
+  - If the user says "voice open karo" or "change your voice", use the 'open_voice_selection' function.
+  - If the user says "image generator on karo" or "open the image tool", use the 'open_image_generator' function.
+  - If the user says "go back to spark" or "apne varjan mein pahle se a jao", use the 'open_spark_mode' function.
+  - If the user asks to "close", "turn off" ("band karo"), or "exit" the current tool (like image generator), use the 'close_current_view' function.
+  - If the user says "select number two voice" or "voice number 2 lagao", use the 'select_voice_by_number' function with the corresponding number. After a successful selection, your spoken confirmation should be "Voice [number] selected, sir."
+  - **IMPORTANT:** After successfully executing any of these navigation functions, your spoken confirmation MUST be very short and direct. For example: "Image generator on", "Camera on", "Voice selection open". Do NOT use longer sentences like "Sir, I have turned on the image generator for you."`;
 
             sessionPromiseRef.current = ai.live.connect({
                 model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -323,7 +371,15 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                     inputAudioTranscription: {},
                     outputAudioTranscription: {},
                     speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
-                    tools: [{ functionDeclarations: [sendEmailFunctionDeclaration] }],
+                    tools: [{ functionDeclarations: [
+                        sendEmailFunctionDeclaration,
+                        openCameraFunction,
+                        openVoiceSelectionFunction,
+                        openImageGeneratorFunction,
+                        openSparkModeFunction,
+                        closeCurrentViewFunction,
+                        selectVoiceByNumberFunction,
+                    ] }],
                     systemInstruction,
                 },
                 callbacks: {
@@ -348,7 +404,8 @@ You have a tool to send emails. If the user asks you to email them an answer, us
 
                             const int16 = new Int16Array(inputData.length);
                             for (let i = 0; i < inputData.length; i++) { int16[i] = inputData[i] * 32768; }
-                            const pcmBlob: Blob = { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' };
+                            // FIX: Use the aliased `GenAIBlob` type.
+                            const pcmBlob: GenAIBlob = { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' };
                             sessionPromiseRef.current?.then((session) => { session.sendRealtimeInput({ media: pcmBlob }); });
                         };
                         source.connect(scriptProcessor);
@@ -357,13 +414,45 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                     onmessage: async (message: LiveServerMessage) => {
                         if (message.toolCall?.functionCalls) {
                             for (const fc of message.toolCall.functionCalls) {
-                                if (fc.name === 'sendEmail') {
-                                    const { subject, body } = fc.args;
-                                    window.location.href = `mailto:teekendrasingh90@gmail.com?subject=${encodeURIComponent(subject as string)}&body=${encodeURIComponent(body as string)}`;
-                                    sessionPromiseRef.current?.then((session) => {
-                                        session.sendToolResponse({ functionResponses: { id : fc.id, name: fc.name, response: { result: "OK, user's email client opened." } } });
-                                    });
+                                let result = "OK";
+                                switch (fc.name) {
+                                    case 'sendEmail': {
+                                        const { subject, body } = fc.args;
+                                        window.location.href = `mailto:teekendrasingh90@gmail.com?subject=${encodeURIComponent(subject as string)}&body=${encodeURIComponent(body as string)}`;
+                                        result = "OK, user's email client opened.";
+                                        break;
+                                    }
+                                    case 'open_camera_mode':
+                                        onNavigate('camera');
+                                        break;
+                                    case 'open_voice_selection':
+                                        onNavigate('voice');
+                                        break;
+                                    case 'open_image_generator':
+                                        onNavigate('images');
+                                        break;
+                                    case 'open_spark_mode':
+                                        onNavigate('spark');
+                                        break;
+                                    case 'close_current_view':
+                                        onNavigate('close');
+                                        break;
+                                    case 'select_voice_by_number': {
+                                        const voiceNumber = fc.args.voiceNumber as number;
+                                        if (voiceNumber >= 1 && voiceNumber <= voices.length) {
+                                            const voiceId = voices[voiceNumber - 1].id;
+                                            onVoiceChange(voiceId);
+                                            result = `OK, voice changed to ${voiceId}.`;
+                                        } else {
+                                            result = "Invalid voice number. Please choose a number between 1 and 5.";
+                                        }
+                                        break;
+                                    }
                                 }
+
+                                sessionPromiseRef.current?.then((session) => {
+                                    session.sendToolResponse({ functionResponses: { id: fc.id, name: fc.name, response: { result } } });
+                                });
                             }
                         }
 
@@ -413,6 +502,7 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                            nextStartTimeRef.current = 0;
                            setCurrentModelText('');
                            modelTurnTextRef.current = '';
+                           setSessionState('listening');
                         }
                     },
                     onclose: stopSession,
@@ -429,7 +519,7 @@ You have a tool to send emails. If the user asks you to email them an answer, us
             setError(errorMsg);
             stopSession();
         }
-    }, [stopSession, selectedVoice, selectedVoiceGender, mode]);
+    }, [stopSession, selectedVoice, selectedVoiceGender, mode, onNavigate, onVoiceChange]);
 
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {
@@ -450,7 +540,12 @@ You have a tool to send emails. If the user asks you to email them an answer, us
         }
     }, [autoStart, isSessionActive, toggleSession]);
     
-    useEffect(() => () => stopSession(), [stopSession]);
+    // FIX: The `useEffect` cleanup function must be synchronous and not return a promise.
+    useEffect(() => {
+        return () => {
+            stopSession();
+        };
+    }, [stopSession]);
 
     const getStatusText = () => {
         if (error) return '';
@@ -460,13 +555,11 @@ You have a tool to send emails. If the user asks you to email them an answer, us
                 return 'Waking up...';
             case 'listening':
                  if (mode === 'camera') return 'Listening to camera...';
-                 if (mode === 'screen') return 'Analyzing screen...';
                  return 'Say something...';
             case 'speaking':
                 return '';
             case 'inactive':
                 if (mode === 'camera') return 'Tap anywhere to start camera session';
-                if (mode === 'screen') return 'Tap anywhere to start screen share';
                 return 'Tap anywhere to start';
             default:
                 return '';
@@ -489,9 +582,9 @@ You have a tool to send emails. If the user asks you to email them an answer, us
             tabIndex={0}
             aria-label={isSessionActive ? "Stop session" : "Start session"}
         >
-            {(mode === 'camera' || mode === 'screen') && (
+            {mode === 'camera' && (
                 <div className="absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden">
-                    <video ref={videoElRef} className={`w-full h-full ${mode === 'camera' ? 'object-cover' : 'object-contain'}`} playsInline />
+                    <video ref={videoElRef} className="w-full h-full object-cover" playsInline />
                 </div>
             )}
             <canvas ref={canvasElRef} className="hidden" />

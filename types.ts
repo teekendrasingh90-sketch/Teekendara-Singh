@@ -29,9 +29,9 @@ export interface VoiceOption {
 
 // Centralized voice data for consistency across the application
 export const voices: VoiceOption[] = [
-  { id: 'Charon', name: 'Charon', gender: 'Male' },
-  { id: 'Puck', name: 'Puck', gender: 'Male' },
-  { id: 'Fenrir', name: 'Fenrir', gender: 'Male' },
-  { id: 'Kore', name: 'Kore', gender: 'Female' },
-  { id: 'Zephyr', name: 'Zephyr', gender: 'Female' },
+  { id: 'Charon', name: 'Voice 1', gender: 'Male' },
+  { id: 'Zephyr', name: 'Voice 2', gender: 'Female' },
+  { id: 'Puck', name: 'Voice 3', gender: 'Male' },
+  { id: 'Fenrir', name: 'Voice 4', gender: 'Male' },
+  { id: 'Kore', name: 'Voice 5', gender: 'Female' },
 ];
