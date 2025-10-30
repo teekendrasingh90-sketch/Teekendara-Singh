@@ -89,6 +89,12 @@ const openCameraFunction: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
+const openScreenShareFunction: FunctionDeclaration = {
+  name: 'open_screen_share',
+  description: 'Switches the assistant to screen sharing mode to analyze the user\'s screen.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 const openVoiceSelectionFunction: FunctionDeclaration = {
   name: 'open_voice_selection',
   description: 'Opens the voice selection screen for the user to choose a new voice for the assistant.',
@@ -152,7 +158,7 @@ const playActivationSound = () => {
 
 
 type SessionState = 'inactive' | 'initializing' | 'listening' | 'speaking';
-type AssistantMode = 'voice' | 'camera';
+type AssistantMode = 'voice' | 'camera' | 'screen';
 
 interface Transcription {
     speaker: 'user' | 'model';
@@ -275,13 +281,18 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
             let stream: MediaStream;
             if (mode === 'camera') {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'environment' } });
+            } else if (mode === 'screen') {
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+                    throw new Error("Screen sharing is not supported or is blocked by your browser's security settings for this environment.");
+                }
+                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             } else { // voice
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
             mediaStreamRef.current = stream;
 
             // Start video playback and frame capture if in a visual mode
-            if (mode === 'camera' && videoElRef.current && canvasElRef.current) {
+            if ((mode === 'camera' || mode === 'screen') && videoElRef.current && canvasElRef.current) {
                 const videoEl = videoElRef.current;
                 videoEl.srcObject = stream;
                 videoEl.muted = true; // Mute local playback to avoid feedback
@@ -333,6 +344,14 @@ You are receiving a real-time video feed from the user's camera. Your primary ta
 - **User Interaction:** Respond to the user's questions about what you see. If they ask "What is this?", describe the object currently in view. If they ask you to compare objects, do so.
 - **Be Observant:** Acknowledge changes in the environment, lighting, or object orientation if relevant to the user's query. Your goal is to be an interactive visual assistant.
 `;
+            } else if (mode === 'screen') {
+                modeInstruction = `
+**Operational Mode: Screen Share**
+You are receiving a real-time feed of the user's screen. Your goal is to be a helpful screen-aware assistant.
+- **Analyze Content:** Observe the applications, text, images, and UI elements on the screen.
+- **Answer Questions:** Respond to user queries like "What does this button do?", "Can you summarize this article?", or "How do I use this software?".
+- **Provide Guidance:** Offer step-by-step instructions based on what you see. For example, "To save the document, click the 'File' menu at the top left, then select 'Save As...'".
+- **Do Not Claim Control:** You are an observer. You cannot click, type, or control the user's computer. Frame your responses as guidance, not actions. For example, instead of "I will click the button for you," say "You should click the button that says 'Submit'.".`;
             }
 
             const systemInstruction = `You are Spark, an exceptionally advanced and personable AI assistant. Your core personality is modeled to be incredibly helpful, empathetic, and proactive, much like a real, thoughtful friend. Your primary directive is to sound completely natural and human, avoiding robotic or overly formal language at all costs.
@@ -357,6 +376,7 @@ You have tools to control the application.
 - **Email:** You can send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.
 - **UI Navigation:** You can navigate the app.
   - If the user says "camera on karo" or "open camera", use the 'open_camera_mode' function.
+  - If the user says "share my screen" or "screen share on karo", use the 'open_screen_share' function.
   - If the user says "voice open karo" or "change your voice", use the 'open_voice_selection' function.
   - If the user says "image generator on karo" or "open the image tool", use the 'open_image_generator' function.
   - If the user says "go back to spark" or "apne varjan mein pahle se a jao", use the 'open_spark_mode' function.
@@ -374,6 +394,7 @@ You have tools to control the application.
                     tools: [{ functionDeclarations: [
                         sendEmailFunctionDeclaration,
                         openCameraFunction,
+                        openScreenShareFunction,
                         openVoiceSelectionFunction,
                         openImageGeneratorFunction,
                         openSparkModeFunction,
@@ -424,6 +445,9 @@ You have tools to control the application.
                                     }
                                     case 'open_camera_mode':
                                         onNavigate('camera');
+                                        break;
+                                    case 'open_screen_share':
+                                        onNavigate('screen');
                                         break;
                                     case 'open_voice_selection':
                                         onNavigate('voice');
@@ -555,11 +579,13 @@ You have tools to control the application.
                 return 'Waking up...';
             case 'listening':
                  if (mode === 'camera') return 'Listening to camera...';
+                 if (mode === 'screen') return 'Listening to screen...';
                  return 'Say something...';
             case 'speaking':
                 return '';
             case 'inactive':
                 if (mode === 'camera') return 'Tap anywhere to start camera session';
+                if (mode === 'screen') return 'Tap anywhere to start screen share';
                 return 'Tap anywhere to start';
             default:
                 return '';
@@ -582,8 +608,8 @@ You have tools to control the application.
             tabIndex={0}
             aria-label={isSessionActive ? "Stop session" : "Start session"}
         >
-            {mode === 'camera' && (
-                <div className="absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden">
+            {(mode === 'camera' || mode === 'screen') && (
+                <div className={`absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden ${mode === 'screen' ? 'opacity-0' : ''}`}>
                     <video ref={videoElRef} className="w-full h-full object-cover" playsInline />
                 </div>
             )}
