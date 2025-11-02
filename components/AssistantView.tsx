@@ -692,19 +692,15 @@ You have tools to control the application.
         };
 
         recognition.onend = () => {
-             // The 'onend' event is fired when the recognition service disconnects.
-             // We want to automatically restart it to keep the wake word listener active,
-             // but only if it's supposed to be running (i.e., not manually stopped,
-             // which is handled by checking recognitionRef.current).
+            // User feedback indicated that the automatic restart of the wake word
+            // listener was perceived as a bug due to flickering microphone icons in the browser.
+            // To address this, the listener is now set to run only once and not restart.
+            // The "or say Spark" functionality will stop after a few seconds of inactivity.
             if (recognitionRef.current) {
-               try {
-                   // This will restart the recognition service.
-                   recognition.start();
-               } catch(e) {
-                   console.error("Could not restart wake word listener in onend:", e);
-                   // Do not null out the ref here. If start() fails, it might be a temporary
-                   // issue, and we don't want to permanently disable the listener.
-               }
+                console.log("Wake word listener has ended and will not be restarted.");
+                recognitionRef.current = null;
+                // Update the UI to reflect that the wake word is no longer active.
+                setIsWakeWordEnabled(false);
             }
         };
         
