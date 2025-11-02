@@ -62,25 +62,10 @@ function pcmToWavBlob(pcmData: Uint8Array): Blob {
     return new Blob([view.buffer], { type: 'audio/wav' });
 }
 
-const getClonedVoices = (): VoiceOption[] => {
-    try {
-        const voicesJson = localStorage.getItem('spark-cloned-voices');
-        return voicesJson ? JSON.parse(voicesJson) : [];
-    } catch (e) {
-        return [];
-    }
-};
-
-
 const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, onVoiceSelect }) => {
     const [playingVoice, setPlayingVoice] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const [clonedVoices, setClonedVoices] = useState<VoiceOption[]>([]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-
-    useEffect(() => {
-        setClonedVoices(getClonedVoices());
-    }, []);
 
     const playSample = async (voice: VoiceOption) => {
         if (playingVoice) return; // Don't allow multiple plays at once
@@ -95,10 +80,8 @@ const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, o
         setPlayingVoice(voice.id);
         setError(null);
         try {
-            // If it's a cloned voice, use a pre-built one for the sample. Otherwise, use its own ID.
-            const voiceIdForApi = voice.type === 'cloned' ? 'Kore' : voice.id;
             const text = `Hello, this is what ${voice.name.toLowerCase()} sounds like.`;
-            const audioB64 = await generateSpeech(text, voiceIdForApi);
+            const audioB64 = await generateSpeech(text, voice.id);
             
             const pcmData = decode(audioB64);
             const wavBlob = pcmToWavBlob(pcmData);
@@ -180,15 +163,6 @@ const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, o
         <div className="animate-fade-in">
             <h2 className="text-3xl font-bold text-center mb-8 text-slate-800 dark:text-white">Select a Voice</h2>
             {error && <p className="text-center text-red-500 dark:text-red-400 mb-4">{error}</p>}
-
-            {clonedVoices.length > 0 && (
-                <div className="mb-10">
-                    <h3 className="text-xl font-bold text-center mb-6 text-slate-700 dark:text-gray-300">Your Cloned Voices</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                        {clonedVoices.map(renderVoiceCard)}
-                    </div>
-                </div>
-            )}
             
             <div>
                  <h3 className="text-xl font-bold text-center mb-6 text-slate-700 dark:text-gray-300">Pre-built Voices</h3>

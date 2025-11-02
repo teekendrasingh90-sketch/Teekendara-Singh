@@ -3,7 +3,6 @@
   "description": "An AI-powered creative assistant to generate stunning images and thumbnails. Upload an image, choose your style and aspect ratio, or write a prompt, and let the AI bring your vision to life.",
   "requestFramePermissions": [
     "microphone",
-    "camera",
-    "display-capture"
+    "camera"
   ]
 }

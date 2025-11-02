@@ -17,9 +17,8 @@ export { default as VideoIcon } from './VideoIcon';
 export { default as SoundWaveIcon } from './SoundWaveIcon';
 export { default as ChatIcon } from './ChatIcon';
 export { default as CameraIcon } from './CameraIcon';
-export { default as DisplayIcon } from './DisplayIcon';
-export { default as VoiceCloneIcon } from './VoiceCloneIcon';
-export { default as TrashIcon } from './TrashIcon';
 // FIX: Export EyeIcon and EyeSlashIcon to resolve module export errors.
 export { default as EyeIcon } from './EyeIcon';
 export { default as EyeSlashIcon } from './EyeSlashIcon';
+// FIX: Export TrashIcon to resolve module export error.
+export { default as TrashIcon } from './TrashIcon';

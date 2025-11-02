@@ -4,7 +4,6 @@ import {
   AssistantView, 
   ImageGeneratorView, 
   VoiceSelectionView,
-  VoiceCloneView,
 } from './components';
 import { View, voices, VoiceOption } from './types';
 import { 
@@ -16,17 +15,15 @@ import {
   DownloadIcon,
   SoundWaveIcon,
   CameraIcon,
-  DisplayIcon,
-  VoiceCloneIcon,
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
-type AssistantMode = 'voice' | 'camera' | 'screen';
-export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close' | 'screen' | 'voice_clone';
+type AssistantMode = 'voice' | 'camera';
+export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close';
 
 const App: React.FC = () => {
-  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | View.VoiceClone | null>(null);
+  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | null>(null);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('voice');
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -34,24 +31,9 @@ const App: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>(() => localStorage.getItem('spark-voice') || 'Charon');
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
   const [assistantKey, setAssistantKey] = useState(0); // Key to force AssistantView remount
-  const [allVoices, setAllVoices] = useState<VoiceOption[]>([]);
+  const [allVoices, setAllVoices] = useState<VoiceOption[]>(voices);
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
-
-  // Load all voices (pre-built + cloned) from storage
-  useEffect(() => {
-    const loadVoices = () => {
-        try {
-            const clonedVoicesJson = localStorage.getItem('spark-cloned-voices');
-            const clonedVoices = clonedVoicesJson ? JSON.parse(clonedVoicesJson) : [];
-            setAllVoices([...voices, ...clonedVoices]);
-        } catch (e) {
-            console.error("Failed to load voices:", e);
-            setAllVoices([...voices]);
-        }
-    };
-    loadVoices();
-  }, [activeGenerator]); // Reload when a generator is closed to see new voices
 
   const selectedVoiceDetails = allVoices.find(v => v.id === selectedVoice) || voices[0];
 
@@ -129,7 +111,7 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
   };
 
-  const openGenerator = (generator: View.Images | View.Voice | View.VoiceClone) => {
+  const openGenerator = (generator: View.Images | View.Voice) => {
     setActiveGenerator(generator);
     setIsFabMenuOpen(false);
   };
@@ -146,14 +128,8 @@ const App: React.FC = () => {
         case 'camera':
             openAssistantMode('camera');
             break;
-        case 'screen':
-            openAssistantMode('screen');
-            break;
         case 'voice':
             openGenerator(View.Voice);
-            break;
-        case 'voice_clone':
-            openGenerator(View.VoiceClone);
             break;
         case 'images':
             openGenerator(View.Images);
@@ -257,18 +233,6 @@ const App: React.FC = () => {
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Camera</span>
               </button>
 
-              {/* Screen Share Mode Button */}
-              <button
-                onClick={() => openAssistantMode('screen')}
-                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === null && assistantMode === 'screen' ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
-                aria-label="Screen Share Mode"
-              >
-                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <DisplayIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                 </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Screen Share</span>
-              </button>
-              
               {/* Voice Selection Button */}
               <button
                 onClick={() => openGenerator(View.Voice)}
@@ -281,18 +245,6 @@ const App: React.FC = () => {
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Voice</span>
               </button>
               
-              {/* Voice Clone Button */}
-              <button
-                onClick={() => openGenerator(View.VoiceClone)}
-                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === View.VoiceClone ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
-                aria-label="Voice Clone"
-              >
-                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                    <VoiceCloneIcon className="h-5 w-5 text-slate-800 dark:text-white" />
-                 </div>
-                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Voice Clone</span>
-              </button>
-
               {/* Image Generator Button */}
               <button
                 onClick={() => openGenerator(View.Images)}
@@ -334,7 +286,6 @@ const App: React.FC = () => {
               <main className="mt-16 md:mt-8 relative">
                 {activeGenerator === View.Images && <ImageGeneratorView />}
                 {activeGenerator === View.Voice && <VoiceSelectionView currentVoice={selectedVoice} onVoiceSelect={handleVoiceSelect} />}
-                {activeGenerator === View.VoiceClone && <VoiceCloneView currentVoice={selectedVoice} onVoiceSelect={handleVoiceSelect} />}
               </main>
             </div>
           </div>

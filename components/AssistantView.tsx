@@ -128,21 +128,9 @@ const openCameraFunction: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
-const openScreenShareFunction: FunctionDeclaration = {
-  name: 'open_screen_share',
-  description: 'Switches the assistant to screen sharing mode to analyze the user\'s screen.',
-  parameters: { type: Type.OBJECT, properties: {} },
-};
-
 const openVoiceSelectionFunction: FunctionDeclaration = {
   name: 'open_voice_selection',
   description: 'Opens the voice selection screen for the user to choose a new voice for the assistant.',
-  parameters: { type: Type.OBJECT, properties: {} },
-};
-
-const openVoiceCloneFunction: FunctionDeclaration = {
-  name: 'open_voice_clone',
-  description: 'Opens the voice cloning screen for the user to upload a voice sample.',
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
@@ -180,30 +168,42 @@ const selectVoiceByNumberFunction: FunctionDeclaration = {
 };
 
 
-// A clean, quick "pop" for system activation, matching the new sound effect.
+// A new, modern activation sound with a haptic "thump" feel.
 const playActivationSound = () => {
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     if (!audioCtx) return;
     const now = audioCtx.currentTime;
-    const duration = 0.1;
-    const gainNode = audioCtx.createGain();
-    gainNode.connect(audioCtx.destination);
-    gainNode.gain.setValueAtTime(0, now);
-    gainNode.gain.linearRampToValueAtTime(0.8, now + 0.005);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    const duration = 0.15;
+
+    // Create a low-frequency oscillator for the "thump"
     const oscillator = audioCtx.createOscillator();
-    oscillator.type = 'sine';
+    oscillator.type = 'sine'; // A sine wave is good for a clean low-end thump
+    oscillator.frequency.setValueAtTime(120, now); // Low frequency
+    oscillator.frequency.exponentialRampToValueAtTime(40, now + duration); // Pitch drop
+
+    // Create a gain node to control the volume envelope (the "click")
+    const gainNode = audioCtx.createGain();
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(1, now + 0.01); // Very fast attack
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + duration); // Quick decay
+
     oscillator.connect(gainNode);
-    oscillator.frequency.setValueAtTime(900, now);
-    oscillator.frequency.exponentialRampToValueAtTime(200, now + duration * 0.9);
+    gainNode.connect(audioCtx.destination);
+    
     oscillator.start(now);
     oscillator.stop(now + duration);
-    setTimeout(() => { if (audioCtx.state !== 'closed') { audioCtx.close(); } }, duration * 1000 + 50);
+
+    // Clean up the context after the sound has played
+    setTimeout(() => {
+        if (audioCtx.state !== 'closed') {
+            audioCtx.close();
+        }
+    }, duration * 1000 + 50);
 };
 
 
 type SessionState = 'inactive' | 'initializing' | 'listening' | 'speaking';
-type AssistantMode = 'voice' | 'camera' | 'screen';
+type AssistantMode = 'voice' | 'camera';
 
 interface Transcription {
     speaker: 'user' | 'model';
@@ -355,18 +355,13 @@ const AssistantView: React.FC<AssistantViewProps> = ({ selectedVoiceDetails, mod
             let stream: MediaStream;
             if (mode === 'camera') {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: 'environment' } });
-            } else if (mode === 'screen') {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    throw new Error("Screen sharing is not supported or is blocked by your browser's security settings for this environment.");
-                }
-                stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             } else { // voice
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
             mediaStreamRef.current = stream;
 
             // Start video playback and frame capture if in a visual mode
-            if ((mode === 'camera' || mode === 'screen') && videoElRef.current && canvasElRef.current) {
+            if ((mode === 'camera') && videoElRef.current && canvasElRef.current) {
                 const videoEl = videoElRef.current;
                 videoEl.srcObject = stream;
                 videoEl.muted = true; // Mute local playback to avoid feedback
@@ -427,14 +422,6 @@ You are receiving a real-time video feed from the user's camera. Your primary ta
 - **User Interaction:** Respond to the user's questions about what you see. If they ask "What is this?", describe the object currently in view. If they ask you to compare objects, do so.
 - **Be Observant:** Acknowledge changes in the environment, lighting, or object orientation if relevant to the user's query. Your goal is to be an interactive visual assistant.
 `;
-            } else if (mode === 'screen') {
-                modeInstruction = `
-**Operational Mode: Screen Share**
-You are receiving a real-time feed of the user's screen. Your goal is to be a helpful screen-aware assistant.
-- **Analyze Content:** Observe the applications, text, images, and UI elements on the screen.
-- **Answer Questions:** Respond to user queries like "What does this button do?", "Can you summarize this article?", or "How do I use this software?".
-- **Provide Guidance:** Offer step-by-step instructions based on what you see. For example, "To save the document, click the 'File' menu at the top left, then select 'Save As...'".
-- **Do Not Claim Control:** You are an observer. You cannot click, type, or control the user's computer. Frame your responses as guidance, not actions. For example, instead of "I will click the button for you," say "You should click the button that says 'Submit'.".`;
             }
 
             const systemInstruction = `You are Spark, an exceptionally advanced and personable AI assistant. Your core personality is modeled to be incredibly helpful, empathetic, and proactive, much like a real, thoughtful friend. Your primary directive is to sound completely natural and human, avoiding robotic or overly formal language at all costs.
@@ -459,9 +446,7 @@ You have tools to control the application.
 - **Email:** You can send emails. If the user asks you to email them an answer, use the sendEmail function to draft an email to 'teekendrasingh90@gmail.com' containing the answer.
 - **UI Navigation:** You can navigate the app.
   - If the user says "camera on karo" or "open camera", use the 'open_camera_mode' function.
-  - If the user says "share my screen" or "screen share on karo", use the 'open_screen_share' function.
   - If the user says "voice open karo" or "change your voice", use the 'open_voice_selection' function.
-  - If the user says "clone my voice" or "voice clone open karo", use the 'open_voice_clone' function.
   - If the user says "image generator on karo" or "open the image tool", use the 'open_image_generator' function.
   - If the user says "go back to spark" or "apne varjan mein pahle se a jao", use the 'open_spark_mode' function.
   - If the user asks to "close", "turn off" ("band karo"), or "exit" the current tool (like image generator), use the 'close_current_view' function.
@@ -478,9 +463,7 @@ You have tools to control the application.
                     tools: [{ functionDeclarations: [
                         sendEmailFunctionDeclaration,
                         openCameraFunction,
-                        openScreenShareFunction,
                         openVoiceSelectionFunction,
-                        openVoiceCloneFunction,
                         openImageGeneratorFunction,
                         openSparkModeFunction,
                         closeCurrentViewFunction,
@@ -531,14 +514,8 @@ You have tools to control the application.
                                     case 'open_camera_mode':
                                         onNavigate('camera');
                                         break;
-                                    case 'open_screen_share':
-                                        onNavigate('screen');
-                                        break;
                                     case 'open_voice_selection':
                                         onNavigate('voice');
-                                        break;
-                                    case 'open_voice_clone':
-                                        onNavigate('voice_clone');
                                         break;
                                     case 'open_image_generator':
                                         onNavigate('images');
@@ -692,15 +669,18 @@ You have tools to control the application.
         };
 
         recognition.onend = () => {
-            // User feedback indicated that the automatic restart of the wake word
-            // listener was perceived as a bug due to flickering microphone icons in the browser.
-            // To address this, the listener is now set to run only once and not restart.
-            // The "or say Spark" functionality will stop after a few seconds of inactivity.
+            // The speech recognition service can time out after a period of silence.
+            // This handler automatically restarts the listener to ensure it's always
+            // ready for the "Spark" wake word, as long as the main session is not active
+            // and the listener hasn't been manually stopped.
             if (recognitionRef.current) {
-                console.log("Wake word listener has ended and will not be restarted.");
-                recognitionRef.current = null;
-                // Update the UI to reflect that the wake word is no longer active.
-                setIsWakeWordEnabled(false);
+                try {
+                    recognition.start();
+                } catch (err) {
+                    console.error("Error restarting wake word listener:", err);
+                    // If restart fails, stop trying.
+                    recognitionRef.current = null;
+                }
             }
         };
         
@@ -758,14 +738,12 @@ You have tools to control the application.
                 return 'Waking up...';
             case 'listening':
                  if (mode === 'camera') return 'Listening to camera...';
-                 if (mode === 'screen') return 'Listening to screen...';
                  return 'Say something...';
             case 'speaking':
                 return '';
             case 'inactive':
                 const wakeWordText = isWakeWordEnabled ? `or say "Spark"` : '';
                 if (mode === 'camera') return `Tap ${wakeWordText} to start camera`;
-                if (mode === 'screen') return `Tap ${wakeWordText} to start screen share`;
                 return `Tap anywhere ${wakeWordText} to start`;
             default:
                 return '';
@@ -788,8 +766,8 @@ You have tools to control the application.
             tabIndex={0}
             aria-label={isSessionActive ? "Stop session" : "Start session"}
         >
-            {(mode === 'camera' || mode === 'screen') && (
-                <div className={`absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden ${mode === 'screen' ? 'opacity-0' : ''}`}>
+            {(mode === 'camera') && (
+                <div className={`absolute inset-0 w-full h-full bg-black z-[-1] overflow-hidden`}>
                     <video ref={videoElRef} className="w-full h-full object-cover" playsInline />
                 </div>
             )}

@@ -4,8 +4,6 @@ export enum View {
   Images = 'Images',
   Voice = 'Voice',
   Camera = 'Camera',
-  ScreenShare = 'ScreenShare',
-  VoiceClone = 'VoiceClone',
 }
 
 export enum ImageStyle {
