@@ -7,6 +7,38 @@ import ParticleRing from './ParticleRing';
 import { CopyIcon, CheckIcon } from './icons';
 import { NavigationTarget } from '../App';
 
+// FIX: Add type definitions for Web Speech API to resolve TypeScript errors.
+// These types are part of the Web Speech API and may not be present in all TypeScript lib configurations.
+interface SpeechRecognitionAlternative {
+  transcript: string;
+}
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  [key: number]: SpeechRecognitionAlternative;
+}
+interface SpeechRecognitionResultList {
+  [key: number]: SpeechRecognitionResult;
+  length: number;
+}
+interface SpeechRecognitionEvent extends Event {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+interface SpeechRecognitionErrorEvent extends Event {
+  error: string;
+}
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: (event: SpeechRecognitionEvent) => void;
+  onerror: (event: SpeechRecognitionErrorEvent) => void;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+
+
 // --- Helper Functions ---
 
 // Audio encoding/decoding from guidelines
@@ -171,19 +203,19 @@ interface Transcription {
 }
 
 interface AssistantViewProps {
-  autoStart?: boolean;
   selectedVoiceDetails: VoiceOption;
   mode: AssistantMode;
   onNavigate: (target: NavigationTarget) => void;
   onVoiceChange: (voiceId: string) => void;
 }
 
-const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoiceDetails, mode = 'voice', onNavigate, onVoiceChange }) => {
+const AssistantView: React.FC<AssistantViewProps> = ({ selectedVoiceDetails, mode = 'voice', onNavigate, onVoiceChange }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
     const [micVolume, setMicVolume] = useState(0);
     const [isBouncing, setIsBouncing] = useState(false);
+    const [isWakeWordEnabled, setIsWakeWordEnabled] = useState(false);
     
     const [transcriptionHistory, setTranscriptionHistory] = useState<Transcription[]>([]);
     const [currentUserText, setCurrentUserText] = useState('');
@@ -203,12 +235,15 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
     const userTurnTextRef = useRef('');
     const modelTurnTextRef = useRef('');
     const transcriptionContainerRef = useRef<HTMLDivElement>(null);
-    const hasAutoStarted = useRef(false);
     
     // Refs for video/screen capture
     const videoElRef = useRef<HTMLVideoElement>(null);
     const canvasElRef = useRef<HTMLCanvasElement>(null);
     const frameIntervalRef = useRef<number | null>(null);
+
+    // Ref for wake word detection
+    const recognitionRef = useRef<SpeechRecognition | null>(null);
+    const toggleSessionRef = useRef<() => void>(() => {});
 
     useEffect(() => {
         let animationFrameId: number;
@@ -228,6 +263,14 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
             setTimeout(() => { container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' }); }, 100);
         }
     }, [transcriptionHistory, currentUserText, currentModelText]);
+
+    const stopWakeWordListener = useCallback(() => {
+      if (recognitionRef.current) {
+        recognitionRef.current.onend = null; // Prevent automatic restart
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+    }, []);
 
     const stopSession = useCallback(async () => {
         sessionPromiseRef.current?.then(session => session.close());
@@ -562,32 +605,106 @@ You have tools to control the application.
             stopSession();
         }
     }, [stopSession, selectedVoiceDetails, mode, onNavigate, onVoiceChange]);
-
+    
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {
             stopSession();
         } else {
+            stopWakeWordListener();
             setIsBouncing(true);
             setTimeout(() => setIsBouncing(false), 400);
             playActivationSound();
             setError(null);
             startSession();
         }
-    }, [isSessionActive, stopSession, startSession]);
+    }, [isSessionActive, stopSession, startSession, stopWakeWordListener]);
+
+    toggleSessionRef.current = toggleSession;
+
+    const startWakeWordListener = useCallback(() => {
+        if (recognitionRef.current || isSessionActive) return;
+
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            console.warn("Speech Recognition API not supported.");
+            setIsWakeWordEnabled(false);
+            return;
+        }
+        setIsWakeWordEnabled(true);
+        const recognition: SpeechRecognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event: SpeechRecognitionEvent) => {
+            for (let i = event.resultIndex; i < event.results.length; ++i) {
+                if (event.results[i].isFinal) {
+                    const transcript = event.results[i][0].transcript;
+                    if (transcript.toLowerCase().trim().includes('spark')) {
+                        toggleSessionRef.current();
+                    }
+                }
+            }
+        };
+
+        recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+            // Errors like 'no-speech' and 'aborted' are not fatal.
+            // 'aborted' can happen if the browser times out the recognition, which is common.
+            // The 'onend' event will be fired next, which will handle restarting.
+            if (event.error === 'no-speech' || event.error === 'aborted') {
+                console.log(`Benign speech recognition error: ${event.error}. The listener will restart.`);
+                return;
+            }
+            
+            console.error('Wake word recognition error:', event.error);
+            if (event.error === 'not-allowed') {
+                setError('Microphone permission denied for wake word detection.');
+                setIsWakeWordEnabled(false);
+            }
+        };
+
+        recognition.onend = () => {
+             // The 'onend' event is fired when the recognition service disconnects.
+             // We want to automatically restart it to keep the wake word listener active,
+             // but only if it's supposed to be running (i.e., not manually stopped,
+             // which is handled by checking recognitionRef.current).
+            if (recognitionRef.current) {
+               try {
+                   // This will restart the recognition service.
+                   recognition.start();
+               } catch(e) {
+                   console.error("Could not restart wake word listener in onend:", e);
+                   // Do not null out the ref here. If start() fails, it might be a temporary
+                   // issue, and we don't want to permanently disable the listener.
+               }
+            }
+        };
+        
+        try {
+            recognition.start();
+        } catch(e) {
+            console.error("Wake word listener failed to start.", e);
+            recognitionRef.current = null;
+        }
+    }, [isSessionActive]);
 
     useEffect(() => {
-        if (autoStart && !isSessionActive && !hasAutoStarted.current) {
-            hasAutoStarted.current = true;
-            toggleSession();
+        if (!isSessionActive) {
+            startWakeWordListener();
+        } else {
+            stopWakeWordListener();
         }
-    }, [autoStart, isSessionActive, toggleSession]);
-    
-    // FIX: The `useEffect` cleanup function must be synchronous and not return a promise.
+    }, [isSessionActive, startWakeWordListener, stopWakeWordListener]);
+
+    // Cleanup on unmount
     useEffect(() => {
         return () => {
+            stopWakeWordListener();
             stopSession();
         };
-    }, [stopSession]);
+    }, [stopWakeWordListener, stopSession]);
+
 
     const getStatusText = () => {
         if (error) return '';
@@ -602,9 +719,10 @@ You have tools to control the application.
             case 'speaking':
                 return '';
             case 'inactive':
-                if (mode === 'camera') return 'Tap anywhere to start camera session';
-                if (mode === 'screen') return 'Tap anywhere to start screen share';
-                return 'Tap anywhere to start';
+                const wakeWordText = isWakeWordEnabled ? `or say "Spark"` : '';
+                if (mode === 'camera') return `Tap ${wakeWordText} to start camera`;
+                if (mode === 'screen') return `Tap ${wakeWordText} to start screen share`;
+                return `Tap anywhere ${wakeWordText} to start`;
             default:
                 return '';
         }

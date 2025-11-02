@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  AuthView,
   AssistantView, 
   ImageGeneratorView, 
   VoiceSelectionView,
@@ -15,7 +14,6 @@ import {
   MicrophoneIcon, 
   ThemeIcon, 
   DownloadIcon,
-  LogoutIcon,
   SoundWaveIcon,
   CameraIcon,
   DisplayIcon,
@@ -28,8 +26,6 @@ type AssistantMode = 'voice' | 'camera' | 'screen';
 export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close' | 'screen' | 'voice_clone';
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
-  const [startAssistant, setStartAssistant] = useState(false);
   const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | View.VoiceClone | null>(null);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('voice');
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
@@ -172,28 +168,12 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLoginSuccess = () => {
-    setIsAuthenticated(true);
-    setStartAssistant(true);
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem('spark-auth-session');
-    setIsAuthenticated(false);
-    setStartAssistant(false);
-    setIsSettingsOpen(false);
-  };
-
   const handleVoiceSelect = (voiceId: string) => {
     setSelectedVoice(voiceId);
     localStorage.setItem('spark-voice', voiceId);
     setActiveGenerator(null); // Close the voice selection view
     setAssistantKey(prev => prev + 1); // Trigger remount of AssistantView to apply voice and auto-start
   };
-  
-  if (!isAuthenticated) {
-    return <AuthView onLoginSuccess={handleLoginSuccess} />;
-  }
   
   return (
     <div className="relative min-h-screen w-full bg-transparent overflow-hidden text-slate-800 dark:text-slate-200">
@@ -237,25 +217,13 @@ const App: React.FC = () => {
                             <span className="text-cyan-600 dark:text-cyan-400 font-semibold text-sm whitespace-nowrap">Download App</span>
                           </button>
                         )}
-                        
-                        {/* Logout Button */}
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center gap-3 bg-red-500/10 dark:bg-red-500/20 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-red-500/20 dark:hover:bg-red-500/30 transition-all duration-300 border border-red-500/20 dark:border-red-500/30 shadow-lg transform hover:scale-105"
-                          aria-label="Logout"
-                        >
-                            <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
-                                <LogoutIcon className="h-5 w-5 text-red-600 dark:text-red-400" />
-                            </div>
-                            <span className="text-red-600 dark:text-red-400 font-semibold text-sm whitespace-nowrap">Logout</span>
-                        </button>
                     </div>
                 </div>
             )}
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView onNavigate={handleNavigationCommand} onVoiceChange={handleVoiceSelect} key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoiceDetails={selectedVoiceDetails} />
+        <AssistantView onNavigate={handleNavigationCommand} onVoiceChange={handleVoiceSelect} key={`${assistantKey}-${assistantMode}`} mode={assistantMode} selectedVoiceDetails={selectedVoiceDetails} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
