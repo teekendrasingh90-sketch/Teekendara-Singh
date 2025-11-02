@@ -1,9 +1,8 @@
 
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 // FIX: Aliased `Blob` to `GenAIBlob` to resolve name collision with the browser's native `Blob` type.
 import { GoogleGenAI, LiveServerMessage, Modality, Blob as GenAIBlob, FunctionDeclaration, Type } from '@google/genai';
-import { VoiceGender, voices } from '../types';
+import { VoiceOption, voices } from '../types';
 import ParticleRing from './ParticleRing';
 import { CopyIcon, CheckIcon } from './icons';
 import { NavigationTarget } from '../App';
@@ -101,6 +100,12 @@ const openVoiceSelectionFunction: FunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
+const openVoiceCloneFunction: FunctionDeclaration = {
+  name: 'open_voice_clone',
+  description: 'Opens the voice cloning screen for the user to upload a voice sample.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 const openImageGeneratorFunction: FunctionDeclaration = {
   name: 'open_image_generator',
   description: 'Opens the image generator tool for the user to create or edit images.',
@@ -167,14 +172,13 @@ interface Transcription {
 
 interface AssistantViewProps {
   autoStart?: boolean;
-  selectedVoice: string;
-  selectedVoiceGender: VoiceGender;
+  selectedVoiceDetails: VoiceOption;
   mode: AssistantMode;
   onNavigate: (target: NavigationTarget) => void;
   onVoiceChange: (voiceId: string) => void;
 }
 
-const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoice, selectedVoiceGender, mode = 'voice', onNavigate, onVoiceChange }) => {
+const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, selectedVoiceDetails, mode = 'voice', onNavigate, onVoiceChange }) => {
     const [isSessionActive, setIsSessionActive] = useState(false);
     const [sessionState, setSessionState] = useState<SessionState>('inactive');
     const [error, setError] = useState<string | null>(null);
@@ -333,7 +337,16 @@ const AssistantView: React.FC<AssistantViewProps> = ({ autoStart = false, select
             
             nextStartTimeRef.current = 0;
 
-            const genderInstruction = selectedVoiceGender === 'Female' ? "For a female voice, you MUST use feminine verb endings (e.g., 'कर सकती हूँ', 'जाऊंगी')." : "For a male voice, use masculine verb endings (e.g., 'कर सकता हूँ', 'जाऊंगा').";
+            // Determine which voice to use for the API call. Cloned voices are simulated.
+            const voiceToUseForApi = selectedVoiceDetails.type === 'cloned' ? 'Kore' : selectedVoiceDetails.id;
+            const genderForInstruction = selectedVoiceDetails.gender;
+            
+            const genderInstruction = genderForInstruction === 'Female' 
+                ? "For a female voice, you MUST use feminine verb endings (e.g., 'कर सकती हूँ', 'जाऊंगी')." 
+                : (genderForInstruction === 'Male' 
+                    ? "For a male voice, use masculine verb endings (e.g., 'कर सकता हूँ', 'जाऊंगा')."
+                    : ""
+                  );
 
             let modeInstruction = '';
             if (mode === 'camera') {
@@ -378,6 +391,7 @@ You have tools to control the application.
   - If the user says "camera on karo" or "open camera", use the 'open_camera_mode' function.
   - If the user says "share my screen" or "screen share on karo", use the 'open_screen_share' function.
   - If the user says "voice open karo" or "change your voice", use the 'open_voice_selection' function.
+  - If the user says "clone my voice" or "voice clone open karo", use the 'open_voice_clone' function.
   - If the user says "image generator on karo" or "open the image tool", use the 'open_image_generator' function.
   - If the user says "go back to spark" or "apne varjan mein pahle se a jao", use the 'open_spark_mode' function.
   - If the user asks to "close", "turn off" ("band karo"), or "exit" the current tool (like image generator), use the 'close_current_view' function.
@@ -390,12 +404,13 @@ You have tools to control the application.
                     responseModalities: [Modality.AUDIO],
                     inputAudioTranscription: {},
                     outputAudioTranscription: {},
-                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: selectedVoice } } },
+                    speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceToUseForApi } } },
                     tools: [{ functionDeclarations: [
                         sendEmailFunctionDeclaration,
                         openCameraFunction,
                         openScreenShareFunction,
                         openVoiceSelectionFunction,
+                        openVoiceCloneFunction,
                         openImageGeneratorFunction,
                         openSparkModeFunction,
                         closeCurrentViewFunction,
@@ -451,6 +466,9 @@ You have tools to control the application.
                                         break;
                                     case 'open_voice_selection':
                                         onNavigate('voice');
+                                        break;
+                                    case 'open_voice_clone':
+                                        onNavigate('voice_clone');
                                         break;
                                     case 'open_image_generator':
                                         onNavigate('images');
@@ -543,7 +561,7 @@ You have tools to control the application.
             setError(errorMsg);
             stopSession();
         }
-    }, [stopSession, selectedVoice, selectedVoiceGender, mode, onNavigate, onVoiceChange]);
+    }, [stopSession, selectedVoiceDetails, mode, onNavigate, onVoiceChange]);
 
     const toggleSession = useCallback(async () => {
         if (isSessionActive) {

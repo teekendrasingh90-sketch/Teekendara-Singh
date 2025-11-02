@@ -5,6 +5,7 @@ export enum View {
   Voice = 'Voice',
   Camera = 'Camera',
   ScreenShare = 'ScreenShare',
+  VoiceClone = 'VoiceClone',
 }
 
 export enum ImageStyle {
@@ -19,19 +20,21 @@ export enum AspectRatio {
   NineSixteen = '9:16',
 }
 
-export type VoiceGender = 'Male' | 'Female';
+export type VoiceGender = 'Male' | 'Female' | 'Cloned';
 
 export interface VoiceOption {
   id: string;
   name: string;
   gender: VoiceGender;
+  type: 'prebuilt' | 'cloned';
+  fileName?: string;
 }
 
 // Centralized voice data for consistency across the application
 export const voices: VoiceOption[] = [
-  { id: 'Charon', name: 'Voice 1', gender: 'Male' },
-  { id: 'Zephyr', name: 'Voice 2', gender: 'Female' },
-  { id: 'Puck', name: 'Voice 3', gender: 'Male' },
-  { id: 'Fenrir', name: 'Voice 4', gender: 'Male' },
-  { id: 'Kore', name: 'Voice 5', gender: 'Female' },
+  { id: 'Charon', name: 'Voice 1', gender: 'Male', type: 'prebuilt' },
+  { id: 'Zephyr', name: 'Voice 2', gender: 'Female', type: 'prebuilt' },
+  { id: 'Puck', name: 'Voice 3', gender: 'Male', type: 'prebuilt' },
+  { id: 'Fenrir', name: 'Voice 4', gender: 'Male', type: 'prebuilt' },
+  { id: 'Kore', name: 'Voice 5', gender: 'Female', type: 'prebuilt' },
 ];

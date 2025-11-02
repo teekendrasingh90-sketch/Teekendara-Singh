@@ -1,6 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { generateSpeech } from '../services/geminiService';
-import { voices } from '../types';
+import { voices, VoiceOption } from '../types';
 import { SpeakerIcon, SpinnerIcon, CheckIcon } from './icons';
 
 interface VoiceSelectionViewProps {
@@ -61,12 +62,27 @@ function pcmToWavBlob(pcmData: Uint8Array): Blob {
     return new Blob([view.buffer], { type: 'audio/wav' });
 }
 
+const getClonedVoices = (): VoiceOption[] => {
+    try {
+        const voicesJson = localStorage.getItem('spark-cloned-voices');
+        return voicesJson ? JSON.parse(voicesJson) : [];
+    } catch (e) {
+        return [];
+    }
+};
+
+
 const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, onVoiceSelect }) => {
     const [playingVoice, setPlayingVoice] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [clonedVoices, setClonedVoices] = useState<VoiceOption[]>([]);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
-    const playSample = async (voiceId: string, voiceName: string) => {
+    useEffect(() => {
+        setClonedVoices(getClonedVoices());
+    }, []);
+
+    const playSample = async (voice: VoiceOption) => {
         if (playingVoice) return; // Don't allow multiple plays at once
 
         // Stop any currently playing audio from a previous sample
@@ -76,11 +92,13 @@ const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, o
             audioRef.current = null;
         }
         
-        setPlayingVoice(voiceId);
+        setPlayingVoice(voice.id);
         setError(null);
         try {
-            const text = `Hello, this is what ${voiceName.toLowerCase()} sounds like.`;
-            const audioB64 = await generateSpeech(text, voiceId);
+            // If it's a cloned voice, use a pre-built one for the sample. Otherwise, use its own ID.
+            const voiceIdForApi = voice.type === 'cloned' ? 'Kore' : voice.id;
+            const text = `Hello, this is what ${voice.name.toLowerCase()} sounds like.`;
+            const audioB64 = await generateSpeech(text, voiceIdForApi);
             
             const pcmData = decode(audioB64);
             const wavBlob = pcmToWavBlob(pcmData);
@@ -120,49 +138,65 @@ const VoiceSelectionView: React.FC<VoiceSelectionViewProps> = ({ currentVoice, o
             }
         };
     }, []);
+
+    const renderVoiceCard = (voice: VoiceOption) => (
+        <div 
+            key={voice.id}
+            onClick={() => onVoiceSelect(voice.id)}
+            className={`bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm p-6 rounded-xl border transition-all duration-300 cursor-pointer ${
+                currentVoice === voice.id 
+                    ? 'border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/50 dark:ring-cyan-400/50' 
+                    : 'border-slate-200 dark:border-gray-700 hover:border-slate-400 dark:hover:border-gray-500'
+            }`}
+        >
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-white">{voice.name}</h3>
+                    <p className="text-sm text-slate-500 dark:text-gray-400">{voice.gender}</p>
+                </div>
+                <div className="flex items-center space-x-4">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            playSample(voice);
+                        }}
+                        disabled={!!playingVoice}
+                        className="bg-slate-200 dark:bg-gray-800 p-3 rounded-full hover:bg-slate-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-wait transition-colors"
+                        aria-label={`Play sample for ${voice.name}`}
+                    >
+                        {playingVoice === voice.id ? <SpinnerIcon /> : <SpeakerIcon />}
+                    </button>
+                    {currentVoice === voice.id && (
+                        <div className="text-cyan-500 dark:text-cyan-400">
+                           <CheckIcon className="h-6 w-6" />
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
     
     return (
         <div className="animate-fade-in">
             <h2 className="text-3xl font-bold text-center mb-8 text-slate-800 dark:text-white">Select a Voice</h2>
             {error && <p className="text-center text-red-500 dark:text-red-400 mb-4">{error}</p>}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
-                {voices.map((voice) => (
-                    <div 
-                        key={voice.id}
-                        onClick={() => onVoiceSelect(voice.id)}
-                        className={`bg-white/60 dark:bg-gray-900/60 backdrop-blur-sm p-6 rounded-xl border transition-all duration-300 cursor-pointer ${
-                            currentVoice === voice.id 
-                                ? 'border-cyan-500 dark:border-cyan-400 ring-2 ring-cyan-500/50 dark:ring-cyan-400/50' 
-                                : 'border-slate-200 dark:border-gray-700 hover:border-slate-400 dark:hover:border-gray-500'
-                        }`}
-                    >
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-800 dark:text-white">{voice.name}</h3>
-                                <p className="text-sm text-slate-500 dark:text-gray-400">{voice.gender}</p>
-                            </div>
-                            <div className="flex items-center space-x-4">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        playSample(voice.id, voice.name);
-                                    }}
-                                    disabled={!!playingVoice}
-                                    className="bg-slate-200 dark:bg-gray-800 p-3 rounded-full hover:bg-slate-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-wait transition-colors"
-                                    aria-label={`Play sample for ${voice.name}`}
-                                >
-                                    {playingVoice === voice.id ? <SpinnerIcon /> : <SpeakerIcon />}
-                                </button>
-                                {currentVoice === voice.id && (
-                                    <div className="text-cyan-500 dark:text-cyan-400">
-                                       <CheckIcon className="h-6 w-6" />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+
+            {clonedVoices.length > 0 && (
+                <div className="mb-10">
+                    <h3 className="text-xl font-bold text-center mb-6 text-slate-700 dark:text-gray-300">Your Cloned Voices</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                        {clonedVoices.map(renderVoiceCard)}
                     </div>
-                ))}
+                </div>
+            )}
+            
+            <div>
+                 <h3 className="text-xl font-bold text-center mb-6 text-slate-700 dark:text-gray-300">Pre-built Voices</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-4xl mx-auto">
+                    {voices.map(renderVoiceCard)}
+                </div>
             </div>
+
         </div>
     );
 };

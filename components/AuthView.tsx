@@ -13,7 +13,7 @@ const AuthView: React.FC<AuthViewProps> = ({ onLoginSuccess }) => {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
 
-  const CORRECT_PASSWORD = 'Cj@jaat11';
+  const CORRECT_PASSWORD = 'vv';
 
   useEffect(() => {
     if (isShaking) {

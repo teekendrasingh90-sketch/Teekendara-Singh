@@ -1,13 +1,13 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   AuthView,
   AssistantView, 
   ImageGeneratorView, 
   VoiceSelectionView,
+  VoiceCloneView,
 } from './components';
-import { View, voices } from './types';
+import { View, voices, VoiceOption } from './types';
 import { 
   SettingsIcon, 
   PlusIcon, 
@@ -19,17 +19,18 @@ import {
   SoundWaveIcon,
   CameraIcon,
   DisplayIcon,
+  VoiceCloneIcon,
 } from './components/icons';
 
 
 type Theme = 'light' | 'dark';
 type AssistantMode = 'voice' | 'camera' | 'screen';
-export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close' | 'screen';
+export type NavigationTarget = 'camera' | 'voice' | 'images' | 'spark' | 'close' | 'screen' | 'voice_clone';
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => !!sessionStorage.getItem('spark-auth-session'));
   const [startAssistant, setStartAssistant] = useState(false);
-  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | null>(null);
+  const [activeGenerator, setActiveGenerator] = useState<View.Images | View.Voice | View.VoiceClone | null>(null);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('voice');
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -37,10 +38,26 @@ const App: React.FC = () => {
   const [selectedVoice, setSelectedVoice] = useState<string>(() => localStorage.getItem('spark-voice') || 'Charon');
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
   const [assistantKey, setAssistantKey] = useState(0); // Key to force AssistantView remount
+  const [allVoices, setAllVoices] = useState<VoiceOption[]>([]);
   const settingsRef = useRef<HTMLDivElement>(null);
   const fabRef = useRef<HTMLDivElement>(null);
 
-  const selectedVoiceDetails = voices.find(v => v.id === selectedVoice) || voices[0];
+  // Load all voices (pre-built + cloned) from storage
+  useEffect(() => {
+    const loadVoices = () => {
+        try {
+            const clonedVoicesJson = localStorage.getItem('spark-cloned-voices');
+            const clonedVoices = clonedVoicesJson ? JSON.parse(clonedVoicesJson) : [];
+            setAllVoices([...voices, ...clonedVoices]);
+        } catch (e) {
+            console.error("Failed to load voices:", e);
+            setAllVoices([...voices]);
+        }
+    };
+    loadVoices();
+  }, [activeGenerator]); // Reload when a generator is closed to see new voices
+
+  const selectedVoiceDetails = allVoices.find(v => v.id === selectedVoice) || voices[0];
 
   // Apply theme class to HTML element
   useEffect(() => {
@@ -116,7 +133,7 @@ const App: React.FC = () => {
     setIsSettingsOpen(false);
   };
 
-  const openGenerator = (generator: View.Images | View.Voice) => {
+  const openGenerator = (generator: View.Images | View.Voice | View.VoiceClone) => {
     setActiveGenerator(generator);
     setIsFabMenuOpen(false);
   };
@@ -138,6 +155,9 @@ const App: React.FC = () => {
             break;
         case 'voice':
             openGenerator(View.Voice);
+            break;
+        case 'voice_clone':
+            openGenerator(View.VoiceClone);
             break;
         case 'images':
             openGenerator(View.Images);
@@ -235,7 +255,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Assistant View is always the base layer */}
-        <AssistantView onNavigate={handleNavigationCommand} onVoiceChange={handleVoiceSelect} key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoice={selectedVoiceDetails.id} selectedVoiceGender={selectedVoiceDetails.gender} />
+        <AssistantView onNavigate={handleNavigationCommand} onVoiceChange={handleVoiceSelect} key={`${assistantKey}-${assistantMode}`} autoStart={startAssistant} mode={assistantMode} selectedVoiceDetails={selectedVoiceDetails} />
 
         {/* Floating Action Button (FAB) and Menu */}
         <div ref={fabRef} className="fixed bottom-6 left-6 sm:bottom-8 sm:left-8 z-50">
@@ -292,6 +312,18 @@ const App: React.FC = () => {
                  </div>
                 <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Voice</span>
               </button>
+              
+              {/* Voice Clone Button */}
+              <button
+                onClick={() => openGenerator(View.VoiceClone)}
+                className={`flex items-center gap-3 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm pl-2 pr-4 py-2 rounded-full hover:bg-slate-200/90 dark:hover:bg-gray-700/90 transition-all duration-300 border shadow-lg transform hover:scale-105 ${activeGenerator === View.VoiceClone ? 'border-slate-800 dark:border-white' : 'border-slate-300 dark:border-gray-700'}`}
+                aria-label="Voice Clone"
+              >
+                 <div className="bg-slate-100 dark:bg-gray-900 p-2 rounded-full">
+                    <VoiceCloneIcon className="h-5 w-5 text-slate-800 dark:text-white" />
+                 </div>
+                <span className="text-slate-800 dark:text-white font-semibold text-sm whitespace-nowrap">Voice Clone</span>
+              </button>
 
               {/* Image Generator Button */}
               <button
@@ -334,6 +366,7 @@ const App: React.FC = () => {
               <main className="mt-16 md:mt-8 relative">
                 {activeGenerator === View.Images && <ImageGeneratorView />}
                 {activeGenerator === View.Voice && <VoiceSelectionView currentVoice={selectedVoice} onVoiceSelect={handleVoiceSelect} />}
+                {activeGenerator === View.VoiceClone && <VoiceCloneView currentVoice={selectedVoice} onVoiceSelect={handleVoiceSelect} />}
               </main>
             </div>
           </div>
