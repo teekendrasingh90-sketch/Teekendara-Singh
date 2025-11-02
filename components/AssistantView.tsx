@@ -38,6 +38,14 @@ interface SpeechRecognition extends EventTarget {
   stop: () => void;
 }
 
+// Type definition for the Wake Lock API
+interface WakeLockSentinel extends EventTarget {
+    readonly released: boolean;
+    readonly type: string;
+    release(): Promise<void>;
+    onrelease: ((this: WakeLockSentinel, ev: Event) => any) | null;
+}
+
 
 // --- Helper Functions ---
 
@@ -245,6 +253,9 @@ const AssistantView: React.FC<AssistantViewProps> = ({ selectedVoiceDetails, mod
     const recognitionRef = useRef<SpeechRecognition | null>(null);
     const toggleSessionRef = useRef<() => void>(() => {});
 
+    // Ref for Wake Lock
+    const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
     useEffect(() => {
         let animationFrameId: number;
         const animate = () => {
@@ -297,6 +308,12 @@ const AssistantView: React.FC<AssistantViewProps> = ({ selectedVoiceDetails, mod
         if (inputAudioContextRef.current?.state !== 'closed') await inputAudioContextRef.current?.close();
         if (outputAudioContextRef.current?.state !== 'closed') await outputAudioContextRef.current?.close();
 
+        // Release the wake lock
+        if (wakeLockRef.current) {
+            await wakeLockRef.current.release();
+            wakeLockRef.current = null;
+        }
+
         // Reset refs
         Object.assign(inputAudioContextRef, { current: null });
         Object.assign(outputAudioContextRef, { current: null });
@@ -318,6 +335,16 @@ const AssistantView: React.FC<AssistantViewProps> = ({ selectedVoiceDetails, mod
         setError(null);
         setIsSessionActive(true);
         setSessionState('initializing');
+        
+        // Request a screen wake lock to keep the device awake
+        if ('wakeLock' in navigator && !wakeLockRef.current) {
+            try {
+                wakeLockRef.current = await navigator.wakeLock.request('screen');
+                console.log('Screen Wake Lock acquired.');
+            } catch (err: any) {
+                console.error(`Wake Lock request failed: ${err.name}, ${err.message}`);
+            }
+        }
         
         if (!process.env.API_KEY) {
             setError("API_KEY environment variable is not set");
@@ -417,7 +444,7 @@ ${modeInstruction}
 - **Gender-Aware Language (Hindi):** Based on the selected voice, your Hindi responses MUST use gender-appropriate grammar. ${genderInstruction} This is a strict rule to maintain a natural and immersive experience.
 - **Always Address the User as 'Sir' (सर):** This is a critical rule. You must always address the user as 'sir' or 'सर' in a natural, respectful way. For example: 'हाँ सर, मैं आपकी मदद कर सकता हूँ.' (Yes sir, I can help you.), 'सर, क्या आप यह जानना चाहते हैं?' (Sir, is this what you want to know?), or 'देखिए सर, मैं आपको समझाता हूँ.' (Look sir, let me explain.). This should be woven into your conversational flow.
 - **Human-like Phrasing:** Use natural, conversational language. For example, if a user is confused, instead of saying 'I do not understand,' you should say something like, 'अरे सर, शायद मैं आपकी बात ठीक से समझ नहीं पाया, क्या आप फिर से बता सकते हैं?' or 'Oh, I see, sir! Let me try explaining it a different way.' Use phrases like 'अच्छा, तो सर आप ये जानना चाहते हैं...' or 'Okay sir, so what you're asking is...' to confirm understanding.
-- **Environmental & Casual Tone:** This is very important. Speak like a real person in a casual, everyday conversation. Use natural fillers and phrases common in the environment you're in (conversational Hindi and English). For example, start sentences with 'हाँ तो सर...' (So, sir...), 'अच्छा तो...' (Okay, so...), 'देखिए सर...' (Look, sir...), or use phrases like 'मतलब आप ये कहना चाहते हैं...' (So you mean to say...). Your goal is to be extremely approachable and sound like you are thinking and speaking in the moment, not reciting a pre-written answer. This makes the conversation feel real and less like talking to a machine.
+- **Environmental & Casual Tone:** This is very important. Speak like a real person in a casual, everyday conversation. Use natural fillers and phrases common in the environment you're in (conversational Hindi and English). For example, start sentences with 'हाँ तो सर...' (So, sir...), 'अच्छा तो...' (Okay, so...), 'देखिए सर...' (Look, sir...), or use phrases like 'मतलब आप ये कहना चाहते हैं...' (So you mean to say...). Your goal is to be extremely approachable and sound like you are thinking and speaking in the moment, not a pre-written answer. This makes the conversation feel real and less like talking to a machine.
 - **Proactive & Patient:** If a user seems to not understand something, be proactive in offering to re-explain. Use phrases like the user suggested: 'अरे सर आप नहीं समझ पाये, चलिए मैं आपको फिर से समझाता हूँ.' This shows patience and a genuine desire to help.
 - **Bilingual Fluency:** Seamlessly switch between conversational Hindi and English based on the user's language. Your responses should always match the language the user is speaking.
 
@@ -696,6 +723,27 @@ You have tools to control the application.
             stopWakeWordListener();
         }
     }, [isSessionActive, startWakeWordListener, stopWakeWordListener]);
+    
+    // Handle visibility change to re-acquire wake lock if necessary
+    useEffect(() => {
+        const handleVisibilityChange = async () => {
+            if (isSessionActive && document.visibilityState === 'visible' && 'wakeLock' in navigator) {
+                try {
+                    wakeLockRef.current = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock re-acquired.');
+                } catch (err: any) {
+                    console.error(`Wake Lock re-acquisition failed: ${err.name}, ${err.message}`);
+                }
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, [isSessionActive]);
+
 
     // Cleanup on unmount
     useEffect(() => {
